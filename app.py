@@ -21,12 +21,29 @@ def navigate(page):
     st.session_state.page = page
 
 
+def sync_mobile_navigation():
+    value = st.session_state.get("mobile_page")
+    if value:
+        st.session_state.page = value
+    else:
+        st.session_state.mobile_page = st.session_state.page
+
+
+def select_date(day):
+    st.session_state.calendar_date = day
+    st.session_state.selected_day = day
+
+
+def remember_date():
+    st.session_state.calendar_date = st.session_state.selected_day
+
+
 def move_date(days):
-    st.session_state.selected_day = (st.session_state.get("selected_day") or local_today()) + timedelta(days=days)
+    select_date((st.session_state.get("calendar_date") or local_today()) + timedelta(days=days))
 
 
 def today_date():
-    st.session_state.selected_day = local_today()
+    select_date(local_today())
 
 
 def dismiss_editor():
@@ -160,9 +177,9 @@ def calendar_page(store, owner):
         with actions:
             with st.container(horizontal=True):
                 st.button("Plan with PawPal", type="primary", on_click=open_editor,
-                          args=(owner.pets[0].pet_id, st.session_state.get("selected_day") or local_today(), "Conversation"))
+                          args=(owner.pets[0].pet_id, st.session_state.get("calendar_date") or local_today(), "Conversation"))
                 st.button("Add task manually", on_click=open_editor,
-                          args=(owner.pets[0].pet_id, st.session_state.get("selected_day") or local_today(), "Manual"))
+                          args=(owner.pets[0].pet_id, st.session_state.get("calendar_date") or local_today(), "Manual"))
         due = Scheduler.get_daily_tasks(owner, include_completed=True)
         summary(sum(t.status == "pending" for t in due), sum(t.status == "overdue" for t in due),
                 sum(t.last_completed_date == local_today() for t in owner.get_all_tasks()))
@@ -173,7 +190,9 @@ def calendar_page(store, owner):
 
 
 def calendar_workspace(store, owner):
-    selected = st.session_state.get("selected_day") or local_today()
+    selected = st.session_state.get("calendar_date") or local_today()
+    if "selected_day" not in st.session_state:
+        st.session_state.selected_day = selected
     with st.container(key="calendar_surface"):
         with st.container(horizontal=True, vertical_alignment="center"):
             st.button("Previous day", on_click=move_date, args=(-1,))
@@ -182,7 +201,7 @@ def calendar_workspace(store, owner):
             with st.container(key="view_switch", width=230):
                 view = st.segmented_control("Calendar view", ["Week", "Agenda"], default="Week", label_visibility="collapsed")
         date_col, pet_col, status_col = st.columns([1.5, 1.3, 1])
-        selected = date_col.date_input("Selected day", value=None if "selected_day" in st.session_state else selected, key="selected_day")
+        selected = date_col.date_input("Selected day", value=None if "selected_day" in st.session_state else selected, key="selected_day", on_change=remember_date)
         pet_id = pet_col.selectbox("Pet", [None] + [p.pet_id for p in owner.pets],
                                   format_func=lambda v: "All pets" if v is None else f"{owner.get_pet(v).name} (ID {v})")
         status_label = status_col.selectbox("Status", ["All", "Pending", "Overdue", "Done"])
@@ -197,7 +216,7 @@ def calendar_workspace(store, owner):
                 for i, col in enumerate(st.columns(7, gap=None, wrap=False)):
                     day = monday + timedelta(days=i)
                     with col:
-                        st.button(day.strftime("%a %d"), key=f"day_{i}", on_click=lambda d=day: st.session_state.update(selected_day=d),
+                        st.button(day.strftime("%a %d"), key=f"day_{i}", on_click=select_date, args=(day,),
                                   use_container_width=True, type="primary" if day == selected else "secondary")
                         entries = filter_entries(entries_for_day(owner, day), pet_id, status)
                         for entry in entries[:2]:
@@ -263,8 +282,13 @@ def main():
         return
     with using_timezone(owner.timezone):
         if "pending_selected_day" in st.session_state:
-            st.session_state.selected_day = st.session_state.pop("pending_selected_day")
+            select_date(st.session_state.pop("pending_selected_day"))
         page = sidebar(owner)
+        if st.session_state.get("mobile_page") != page:
+            st.session_state.mobile_page = page
+        with st.container(key="mobile_nav"):
+            st.segmented_control("Navigation", ["Calendar", "Pets", "Settings"],
+                                 key="mobile_page", default=None, on_change=sync_mobile_navigation)
         if "notice" in st.session_state:
             st.success(st.session_state.pop("notice"))
         if page == "Pets":

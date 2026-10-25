@@ -20,6 +20,7 @@ def map_search_url(location: str) -> str:
 def open_editor(pet_id, day=None, mode="Manual"):
     st.session_state.editor_open = True
     st.session_state.entry_mode = mode
+    st.session_state.conversation_requested = mode == "Conversation"
     if mode == "Manual" and st.session_state.get("task_draft") is None:
         st.session_state.task_draft = TaskDraft(pet_id, "", day or local_today())
 
@@ -31,6 +32,7 @@ def cancel_editor():
     st.session_state.pop("planner_error", None)
     st.session_state.pop("composer_count", None)
     st.session_state.pop("preview_blocked", None)
+    st.session_state.pop("conversation_requested", None)
 
 
 def conversation_input(owner):
@@ -62,6 +64,7 @@ def conversation_input(owner):
                 st.session_state.pop("planner_error", None)
                 st.session_state.composer_count = count + 1
                 st.session_state.preview_blocked = result.draft is None
+                st.session_state.conversation_requested = result.draft is None
                 if result.draft is not None:
                     st.session_state.task_draft = result.draft
                 st.rerun()
@@ -69,13 +72,16 @@ def conversation_input(owner):
         st.error(st.session_state.planner_error)
 
 
+def entry_mode_changed():
+    st.session_state.conversation_requested = st.session_state.get("entry_mode") == "Conversation"
+
+
 def show_editor(store, owner):
-    with st.container(border=True):
-        st.subheader("Plan a care task")
+    with st.container(key="task_editor"):
         mode = st.segmented_control("Entry method", ["Conversation", "Manual"],
-                                    default=None if "entry_mode" in st.session_state else "Manual", key="entry_mode") or "Conversation"
+                                    default=None if "entry_mode" in st.session_state else "Manual", key="entry_mode", on_change=entry_mode_changed) or "Conversation"
         if mode == "Conversation":
-            with st.expander("Conversation", expanded=st.session_state.get("task_draft") is None or st.session_state.get("preview_blocked", False)):
+            with st.expander("Conversation", expanded=st.session_state.get("conversation_requested", False) or st.session_state.get("task_draft") is None or st.session_state.get("preview_blocked", False)):
                 conversation_input(owner)
         elif st.session_state.get("task_draft") is None:
             st.session_state.task_draft = TaskDraft(owner.pets[0].pet_id, "", local_today())
@@ -90,20 +96,24 @@ def show_editor(store, owner):
         st.subheader("Review your task")
         prefix = draft.request_id
         pet_ids = [p.pet_id for p in owner.pets]
-        pet_id = st.selectbox("Assign to pet", pet_ids, index=pet_ids.index(draft.pet_id) if draft.pet_id in pet_ids else 0,
-                             format_func=lambda value: f"{owner.get_pet(value).name} (ID {value})", key=f"{prefix}_pet")
         title = st.text_input("Task title", value=draft.title, max_chars=120, key=f"{prefix}_title")
-        due = st.date_input("Date", value=draft.due_date or local_today(), key=f"{prefix}_date")
-        anytime = st.checkbox("Anytime", value=draft.time_of_day is None, key=f"{prefix}_anytime")
-        at = st.time_input("Time", value=draft.time_of_day or time(9), disabled=anytime, key=f"{prefix}_time")
-        repeat = st.selectbox("Repeat", list(REPEATS), index=list(REPEATS).index(draft.repeat),
-                              format_func=REPEATS.get, key=f"{prefix}_repeat")
+        pet_col, date_col = st.columns(2)
+        pet_id = pet_col.selectbox("Assign to pet", pet_ids, index=pet_ids.index(draft.pet_id) if draft.pet_id in pet_ids else 0,
+                                   format_func=lambda value: f"{owner.get_pet(value).name} (ID {value})", key=f"{prefix}_pet")
+        due = date_col.date_input("Date", value=draft.due_date or local_today(), key=f"{prefix}_date")
+        repeat_col, time_col = st.columns(2)
+        repeat = repeat_col.selectbox("Repeat", list(REPEATS), index=list(REPEATS).index(draft.repeat),
+                                     format_func=REPEATS.get, key=f"{prefix}_repeat")
+        with time_col:
+            anytime = st.checkbox("Anytime", value=draft.time_of_day is None, key=f"{prefix}_anytime")
+            at = None if anytime else st.time_input("Time", value=draft.time_of_day or time(9), key=f"{prefix}_time")
         interval = 1
         if repeat == "CUSTOM":
-            interval = st.number_input("Interval in days", min_value=1, max_value=365,
-                                       value=draft.interval_days if draft.repeat == "CUSTOM" else 3, key=f"{prefix}_interval")
+            interval = repeat_col.number_input("Interval in days", min_value=1, max_value=365,
+                                               value=draft.interval_days if draft.repeat == "CUSTOM" else 3, key=f"{prefix}_interval")
         location = st.text_input("Location (optional)", value=draft.location, max_chars=300, key=f"{prefix}_location")
-        description = st.text_area("Description (optional)", value=draft.description, max_chars=1000, key=f"{prefix}_description")
+        with st.expander("Description (optional)", expanded=bool(draft.description)):
+            description = st.text_area("Description", value=draft.description, max_chars=1000, key=f"{prefix}_description")
         current = replace(draft, pet_id=pet_id, title=title, due_date=due, time_of_day=None if anytime else at,
                           repeat=repeat, interval_days=int(interval), location=location, description=description)
         st.session_state.task_draft = current
@@ -116,17 +126,18 @@ def show_editor(store, owner):
                                        key=f"{prefix}_conflict_{due}_{at}_{pet_id}")
         st.caption(f"{due:%A, %B %d, %Y} | {owner.timezone}" if due else "Choose a date.")
         st.caption("Nothing is saved until you confirm.")
-        left, right = st.columns(2)
-        if left.button("Cancel", use_container_width=True):
-            cancel_editor()
-            st.rerun()
-        if right.button("Confirm and save", type="primary", use_container_width=True, disabled=due is None or (not anytime and at is None)):
-            try:
-                saved = store.create_task(current, allow_conflicts=acknowledged)
-            except (ValueError, sqlite3.Error, OSError) as error:
-                st.error(str(error) if isinstance(error, ValueError) else "Could not save. Your draft is still here; check local storage and try again.")
-            else:
-                st.session_state.pending_selected_day = saved.due_date or local_today()
+        with st.container(key="confirm_actions"):
+            left, right = st.columns(2)
+            if left.button("Cancel", use_container_width=True):
                 cancel_editor()
-                st.session_state.notice = "Task saved."
                 st.rerun()
+            if right.button("Confirm and save", type="primary", use_container_width=True, disabled=due is None or (not anytime and at is None)):
+                try:
+                    saved = store.create_task(current, allow_conflicts=acknowledged)
+                except (ValueError, sqlite3.Error, OSError) as error:
+                    st.error(str(error) if isinstance(error, ValueError) else "Could not save. Your draft is still here; check local storage and try again.")
+                else:
+                    st.session_state.pending_selected_day = saved.due_date or local_today()
+                    cancel_editor()
+                    st.session_state.notice = "Task saved."
+                    st.rerun()
