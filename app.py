@@ -99,7 +99,8 @@ def user_page(store, owner, profiles):
                     except (ValueError, sqlite3.Error, OSError):
                         st.error("Could not save the timezone. Try again.")
                     else:
-                        st.success("Timezone saved. Task times remain local wall times.")
+                        st.session_state.notice = "Timezone saved. Task times remain local wall times."
+                        st.rerun()
         if profiles:
             others = [p for p in profiles if owner is None or p.owner_id != owner.owner_id]
             if others:

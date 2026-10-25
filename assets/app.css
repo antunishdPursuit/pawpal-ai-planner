@@ -92,7 +92,7 @@ a:focus-visible {outline:3px solid var(--paw-primary)!important; outline-offset:
  *,*::before,*::after {animation:none!important; transition:none!important;}
 }
 [data-testid="stSidebarCollapseButton"] {visibility:visible!important;}
-[data-testid="stExpandSidebarButton"] button,[data-testid="stSidebarCollapseButton"] button {min-width:44px!important; min-height:44px!important;}
+[data-testid="stExpandSidebarButton"],[data-testid="stSidebarCollapseButton"] button {min-width:44px!important; min-height:44px!important;}
 
 .stMainBlockContainer {padding-top:56px;}
 .st-key-workspace_nav button {justify-content:flex-start; border:0; background:transparent;}

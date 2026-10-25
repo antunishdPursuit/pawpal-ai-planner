@@ -20,7 +20,9 @@ def map_search_url(location: str) -> str:
 def has_draft_content(draft):
     return draft is not None and bool(draft.title.strip() or draft.description.strip()
                                       or draft.location.strip() or draft.time_of_day is not None
-                                      or draft.repeat != "NONE")
+                                      or draft.repeat != "NONE"
+                                      or draft.pet_id != st.session_state.get("editor_pet_id", draft.pet_id)
+                                      or draft.due_date != st.session_state.get("editor_day", draft.due_date))
 
 
 def open_editor(pet_id, day=None, mode="Manual"):
@@ -51,12 +53,18 @@ def cancel_editor():
 
 def keep_draft():
     count = st.session_state.get("composer_count", 0)
-    st.session_state.pending_request = st.session_state.get(f"request_{count}", "")
+    key = f"request_{count}"
+    if key in st.session_state:
+        st.session_state.pending_request = st.session_state[key]
     st.session_state.editor_open = False
 
 
 def start_over():
+    day = st.session_state.get("editor_day")
+    pet_id = st.session_state.get("editor_pet_id")
     cancel_editor()
+    st.session_state.editor_day = day
+    st.session_state.editor_pet_id = pet_id
     st.session_state.editor_open = True
     st.session_state.entry_mode = "Manual"
 
@@ -106,6 +114,9 @@ def conversation_input(owner):
 
 
 def entry_mode_changed():
+    key = f"request_{st.session_state.get('composer_count', 0)}"
+    if key in st.session_state:
+        st.session_state.pending_request = st.session_state[key]
     st.session_state.conversation_requested = st.session_state.get("entry_mode") == "Conversation"
 
 
