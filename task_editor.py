@@ -140,8 +140,7 @@ def show_editor(store, owner):
                 st.rerun()
             return
         st.subheader("Review your task")
-        if has_draft_content(draft):
-            st.button("Start over", on_click=start_over, help="Discard this draft and conversation")
+        st.button("Start over", on_click=start_over, help="Discard this draft and conversation")
         prefix = draft.request_id
         pet_ids = [p.pet_id for p in owner.pets]
         title = st.text_input("Task title", value=draft.title, max_chars=120, key=f"{prefix}_title")
