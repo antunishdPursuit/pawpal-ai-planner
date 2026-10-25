@@ -76,7 +76,6 @@ def conversation_input(owner):
             st.text(item["text"])
     if not is_configured():
         st.info("Gemini is not configured yet. You can still create tasks with Manual.")
-    st.caption("Your request and relevant saved pet/task details are sent to Google Gemini. Plan one task at a time.")
     count = st.session_state.get("composer_count", 0)
     request = st.text_area("What would you like to plan?", value=st.session_state.get("pending_request", ""),
                            max_chars=2000, key=f"request_{count}",

@@ -21,6 +21,11 @@ def navigate(page):
     st.session_state.page = page
 
 
+def pet_calendar(pet_id):
+    st.session_state.calendar_pet = pet_id
+    navigate("Calendar")
+
+
 def select_date(day):
     st.session_state.calendar_date = day
     st.session_state.selected_day = day
@@ -82,8 +87,7 @@ def profile_form(store):
 
 
 def user_page(store, owner, profiles):
-    st.title("User")
-    st.caption("Choose who is planning. Each local user has their own pets and calendar.")
+    st.title("Change user" if owner else "Choose user" if profiles else "Add user")
     with st.container(key="profile_surface"):
         if owner:
             st.caption("CURRENT USER")
@@ -115,14 +119,12 @@ def user_page(store, owner, profiles):
                     activate_profile(selected)
                     st.rerun()
         with st.expander("Add a new local user", expanded=not profiles):
-            st.caption("A name and timezone are all you need. No password or sign-in.")
             profile_form(store)
     with st.expander("Local saving and Gemini"):
         st.caption("Data is saved on this computer, without cloud sync. Local users are not password-protected.")
         st.text(str(store.path))
         st.write("Gemini configured" if is_configured() else "Gemini not configured")
         st.text("Model: " + configuration()[1])
-        st.caption("Manual task entry works without Gemini. Requests and relevant pet/task details go to Gemini only when you create a preview.")
 
 
 def pet_form(store):
@@ -143,7 +145,7 @@ def pet_form(store):
             st.rerun()
 
 
-def sidebar(owner):
+def sidebar(owner, profiles):
     with st.sidebar:
         brand()
         with st.container(key="current_user"):
@@ -152,28 +154,21 @@ def sidebar(owner):
                 st.button(owner.name, icon=":material/account_circle:", on_click=navigate,
                           args=("User",), use_container_width=True, help="Change user")
             else:
-                st.caption("Choose a user to begin")
+                st.button("Choose user" if profiles else "Add user", on_click=navigate,
+                          args=("User",), use_container_width=True)
         with st.container(key="workspace_nav"):
-            for page, icon in (("User", ":material/person:"), ("Pets", ":material/pets:"),
-                               ("Calendar", ":material/calendar_month:")):
+            for page, icon in (("Pets", ":material/pets:"), ("Calendar", ":material/calendar_month:")):
                 enabled = page == "User" or (owner is not None and (page == "Pets" or bool(owner.pets)))
                 st.button(page, icon=icon, on_click=navigate, args=(page,), key=f"nav_{page}",
                           disabled=not enabled, use_container_width=True,
                           help=("Choose a user first" if owner is None else "Add a pet first") if not enabled else None,
                           type="primary" if st.session_state.page == page else "secondary")
-        st.divider()
-        st.caption("Saved on this device")
-        if owner is None:
-            st.caption("Choose a user, then add a pet to start planning.")
-        elif not owner.pets:
-            st.caption("Add your first pet to open the calendar.")
     return st.session_state.page
 
 
 def pets_page(store, owner):
     title, action = st.columns([3, 1], vertical_alignment="center")
     title.title("Your pets")
-    st.caption("Add a pet here. Plan their care in the calendar.")
     if not owner.pets:
         with st.container(key="pets_surface"):
             st.subheader("Meet your first pet")
@@ -187,6 +182,8 @@ def pets_page(store, owner):
                 with st.container(border=True):
                     st.subheader(pet.name)
                     st.caption(f"{pet.species.capitalize()} / Age {pet.age}")
+                    st.button(f"View {pet.name}'s calendar", key=f"pet_calendar_{pet.pet_id}",
+                              on_click=pet_calendar, args=(pet.pet_id,))
 
 
 def task_card(store, owner, entry, prefix):
@@ -230,12 +227,8 @@ def calendar_page(store, owner):
     heading.title("Care calendar")
     heading.caption(local_today().strftime("%A, %B %d") + " / " + owner.timezone)
     chosen_pet = st.session_state.get("calendar_pet") or owner.pets[0].pet_id
-    with actions:
-        with st.container(horizontal=True):
-            st.button("Plan with PawPal", type="primary", on_click=open_editor,
-                      args=(chosen_pet, st.session_state.get("calendar_date") or local_today(), "Conversation"))
-            st.button("Add task manually", on_click=open_editor,
-                      args=(chosen_pet, st.session_state.get("calendar_date") or local_today(), "Manual"))
+    actions.button("Add task", type="primary", on_click=open_editor,
+                   args=(chosen_pet, st.session_state.get("calendar_date") or local_today(), "Conversation"))
     calendar_workspace(store, owner)
 
 
@@ -327,7 +320,7 @@ def main():
     except (sqlite3.Error, OSError):
         st.error("Local storage is unavailable. Check folder permissions or PAWPAL_DB_PATH, then reload.")
         return
-    page = sidebar(owner)
+    page = sidebar(owner, profiles)
     if "notice" in st.session_state:
         st.success(st.session_state.pop("notice"))
     if page == "User":
