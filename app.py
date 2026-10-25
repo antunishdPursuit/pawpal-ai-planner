@@ -9,11 +9,11 @@ from calendar_view import CalendarEntry, entries_for_day, filter_entries, day_co
 from pawpal_system import Scheduler
 from planner_clock import local_today, using_timezone
 from planner_storage import PlannerStore
-from task_editor import show_editor, open_editor, map_search_url
+from task_editor import show_editor, open_editor, cancel_editor, map_search_url
 from gemini_planner import is_configured, configuration
-from ui_components import task_summary, calendar_chip, empty_panel, brand
+from ui_components import task_summary, calendar_chip, brand
 
-st.set_page_config(page_title="PawPal AI Planner", page_icon=favicon(), layout="wide", initial_sidebar_state="auto")
+st.set_page_config(page_title="PawPal AI Planner", page_icon=favicon(), layout="wide", initial_sidebar_state="expanded")
 apply_theme()
 
 
@@ -28,14 +28,6 @@ def select_date(day):
 
 def remember_date():
     st.session_state.calendar_date = st.session_state.selected_day
-
-
-def move_date(days):
-    select_date((st.session_state.get("calendar_date") or local_today()) + timedelta(days=days))
-
-
-def today_date():
-    select_date(local_today())
 
 
 def dismiss_editor():
@@ -62,28 +54,87 @@ def pet_dialog(store):
     pet_form(store)
 
 
-def profile_form(store, owner=None):
-    with st.form("profile_form"):
-        name = st.text_input("Your name", value=owner.name if owner else "", max_chars=80)
+def activate_profile(owner_id):
+    # Unsaved inputs belong to one user; never carry a draft into another profile.
+    draft = st.session_state.get("task_draft")
+    draft_prefix = draft.request_id + "_" if draft else None
+    cancel_editor()
+    for key in list(st.session_state):
+        if key.startswith("request_") or (draft_prefix and key.startswith(draft_prefix)):
+            st.session_state.pop(key, None)
+    for key in ("calendar_date", "selected_day", "pending_selected_day", "calendar_pet",
+                "calendar_status", "calendar_view", "pet_name", "pet_species", "pet_age", "notice"):
+        st.session_state.pop(key, None)
+    st.session_state.pet_dialog_open = False
+    st.session_state.active_owner_id = owner_id
+    st.session_state.page = "Pets"
+
+
+def profile_form(store):
+    with st.form("new_user_form"):
+        name = st.text_input("Name", max_chars=80)
         zones = sorted(available_timezones())
-        current = owner.timezone if owner else "America/New_York"
-        zone = st.selectbox("Timezone", zones, index=zones.index(current))
-        submitted = st.form_submit_button("Save profile", type="primary", use_container_width=True)
+        zone = st.selectbox("Timezone", zones, index=zones.index("America/New_York"))
+        submitted = st.form_submit_button("Create user", type="primary", use_container_width=True)
     if submitted:
         try:
-            store.save_profile(name, zone)
+            owner = store.create_profile(name, zone)
         except (ValueError, sqlite3.Error, OSError) as error:
-            st.error(str(error) if isinstance(error, ValueError) else "Could not save your profile. Check local storage permissions and try again.")
+            st.error(str(error) if isinstance(error, ValueError) else "Could not create this user. Try again.")
         else:
-            st.session_state.notice = "Profile saved."
+            activate_profile(owner.owner_id)
             st.rerun()
+
+
+def user_page(store, owner, profiles):
+    st.title("User")
+    st.caption("Choose who is planning. Each local user has their own pets and calendar.")
+    with st.container(key="profile_surface"):
+        if owner:
+            st.caption("CURRENT USER")
+            st.subheader(owner.name)
+            with st.expander("Timezone: " + owner.timezone):
+                with st.form("timezone_form"):
+                    zones = sorted(available_timezones())
+                    zone = st.selectbox("Your timezone", zones, index=zones.index(owner.timezone))
+                    save_zone = st.form_submit_button("Save timezone")
+                if save_zone:
+                    try:
+                        PlannerStore(store.path, owner.owner_id).save_profile(owner.name, zone)
+                    except (ValueError, sqlite3.Error, OSError):
+                        st.error("Could not save the timezone. Try again.")
+                    else:
+                        st.success("Timezone saved. Task times remain local wall times.")
+        if profiles:
+            others = [p for p in profiles if owner is None or p.owner_id != owner.owner_id]
+            if others:
+                st.subheader("Change user" if owner else "Choose a user")
+                selected = st.selectbox("Saved users", [p.owner_id for p in others],
+                                       format_func=lambda value: next(p.name for p in others if p.owner_id == value),
+                                       key="user_choice")
+                if st.session_state.get("task_draft") or st.session_state.get("conversation"):
+                    st.warning("Changing users discards the current unsaved task draft and conversation.")
+                if st.button("Use this user", type="primary"):
+                    activate_profile(selected)
+                    st.rerun()
+        with st.expander("Add a new local user", expanded=not profiles):
+            st.caption("A name and timezone are all you need. No password or sign-in.")
+            if st.session_state.get("task_draft") or st.session_state.get("conversation"):
+                st.warning("Creating a user discards the current unsaved task draft and conversation.")
+            profile_form(store)
+    with st.expander("Local saving and Gemini"):
+        st.caption("Data is saved on this computer, without cloud sync. Local users are not password-protected.")
+        st.text(str(store.path))
+        st.write("Gemini configured" if is_configured() else "Gemini not configured")
+        st.text("Model: " + configuration()[1])
+        st.caption("Manual task entry works without Gemini. Requests and relevant pet/task details go to Gemini only when you create a preview.")
 
 
 def pet_form(store):
     with st.form("pet_form"):
-        name = st.text_input("Pet name", max_chars=80)
-        species = st.selectbox("Species", ["dog", "cat", "other"])
-        age = st.number_input("Age", min_value=0, max_value=30, value=2, step=1)
+        name = st.text_input("Pet name", max_chars=80, key="pet_name")
+        species = st.selectbox("Species", ["dog", "cat", "other"], key="pet_species")
+        age = st.number_input("Age", min_value=0, max_value=30, value=2, step=1, key="pet_age")
         submit = st.form_submit_button("Add pet", type="primary", use_container_width=True)
     if submit:
         try:
@@ -92,37 +143,55 @@ def pet_form(store):
             st.error(str(error) if isinstance(error, ValueError) else "Could not save this pet. Your entries are still here.")
         else:
             st.session_state.pet_dialog_open = False
-            st.session_state.notice = f"{pet.name} added."
+            st.session_state.notice = f"{pet.name} added. Plan their first care task."
+            st.session_state.page = "Calendar"
             st.rerun()
 
 
 def sidebar(owner):
     with st.sidebar:
         brand()
-        st.radio("Workspace", ["Calendar", "Pets", "Settings"], key="page", label_visibility="collapsed")
+        with st.container(key="current_user"):
+            if owner:
+                st.caption("CURRENT USER")
+                st.button(owner.name, icon=":material/account_circle:", on_click=navigate,
+                          args=("User",), use_container_width=True, help="Change user")
+            else:
+                st.caption("Choose a user to begin")
+        with st.container(key="workspace_nav"):
+            for page, icon in (("User", ":material/person:"), ("Pets", ":material/pets:"),
+                               ("Calendar", ":material/calendar_month:")):
+                enabled = page == "User" or (owner is not None and (page == "Pets" or bool(owner.pets)))
+                st.button(page, icon=icon, on_click=navigate, args=(page,), key=f"nav_{page}",
+                          disabled=not enabled, use_container_width=True,
+                          help=("Choose a user first" if owner is None else "Add a pet first") if not enabled else None,
+                          type="primary" if st.session_state.page == page else "secondary")
         st.divider()
-        st.text(owner.name)
-        st.caption(f"{len(owner.pets)} registered pet{'s' if len(owner.pets) != 1 else ''}")
         st.caption("Saved on this device")
+        if owner is None:
+            st.caption("Choose a user, then add a pet to start planning.")
+        elif not owner.pets:
+            st.caption("Add your first pet to open the calendar.")
     return st.session_state.page
 
 
 def pets_page(store, owner):
     title, action = st.columns([3, 1], vertical_alignment="center")
     title.title("Your pets")
-    action.button("Add a pet", on_click=show_pet_dialog, type="primary", use_container_width=True)
-    st.caption("Profiles keep each care task connected to the right pet.")
+    st.caption("Add a pet here. Plan their care in the calendar.")
     if not owner.pets:
-        empty_panel("Meet your first pet", "Add their name, species and age. Then start a care plan from the calendar.")
+        with st.container(key="pets_surface"):
+            st.subheader("Meet your first pet")
+            st.write("Start with their name, species and age.")
+            pet_form(store)
     else:
+        action.button("Add a pet", on_click=show_pet_dialog, type="primary", use_container_width=True)
         columns = st.columns(min(3, len(owner.pets)))
         for i, pet in enumerate(owner.pets):
             with columns[i % len(columns)]:
                 with st.container(border=True):
                     st.subheader(pet.name)
-                    st.caption(f"{pet.species.capitalize()} / Age {pet.age} / ID {pet.pet_id}")
-                    st.write(f"{sum(t.status != 'done' for t in pet.tasks)} active care tasks")
-                    st.caption(f"{len(pet.tasks)} saved task occurrences")
+                    st.caption(f"{pet.species.capitalize()} / Age {pet.age}")
 
 
 def task_card(store, owner, entry, prefix):
@@ -165,17 +234,13 @@ def calendar_page(store, owner):
     heading, actions = st.columns([3, 2], vertical_alignment="center")
     heading.title("Care calendar")
     heading.caption(local_today().strftime("%A, %B %d") + " / " + owner.timezone)
-    if owner.pets:
-        with actions:
-            with st.container(horizontal=True):
-                st.button("Plan with PawPal", type="primary", on_click=open_editor,
-                          args=(owner.pets[0].pet_id, st.session_state.get("calendar_date") or local_today(), "Conversation"))
-                st.button("Add task manually", on_click=open_editor,
-                          args=(owner.pets[0].pet_id, st.session_state.get("calendar_date") or local_today(), "Manual"))
-
-    else:
-        empty_panel("Your care plan starts with a pet", "Add your pet to schedule walks, meals and appointments. Confirm each task before it enters your calendar.")
-        st.button("Add your first pet", on_click=show_pet_dialog, type="primary")
+    chosen_pet = st.session_state.get("calendar_pet") or owner.pets[0].pet_id
+    with actions:
+        with st.container(horizontal=True):
+            st.button("Plan with PawPal", type="primary", on_click=open_editor,
+                      args=(chosen_pet, st.session_state.get("calendar_date") or local_today(), "Conversation"))
+            st.button("Add task manually", on_click=open_editor,
+                      args=(chosen_pet, st.session_state.get("calendar_date") or local_today(), "Manual"))
     calendar_workspace(store, owner)
 
 
@@ -185,16 +250,18 @@ def calendar_workspace(store, owner):
         st.session_state.selected_day = selected
     with st.container(key="calendar_surface"):
         with st.container(horizontal=True, vertical_alignment="center"):
-            st.button("Previous day", on_click=move_date, args=(-1,))
-            st.button("Today", on_click=today_date)
-            st.button("Next day", on_click=move_date, args=(1,))
+            st.button("Previous day", on_click=select_date, args=(selected - timedelta(days=1),))
+            st.button("Today", on_click=select_date, args=(local_today(),))
+            st.button("Next day", on_click=select_date, args=(selected + timedelta(days=1),))
             with st.container(key="view_switch", width=230):
-                view = st.segmented_control("Calendar view", ["Week", "Agenda"], default="Week", label_visibility="collapsed")
+                view = st.radio("Calendar view", ["Week", "Agenda"], index=0, horizontal=True, label_visibility="collapsed", key="calendar_view")
         date_col, pet_col, status_col = st.columns([1.5, 1.3, 1])
         selected = date_col.date_input("Selected day", value=None if "selected_day" in st.session_state else selected, key="selected_day", on_change=remember_date)
         pet_id = pet_col.selectbox("Pet", [None] + [p.pet_id for p in owner.pets],
-                                  format_func=lambda v: "All pets" if v is None else f"{owner.get_pet(v).name} (ID {v})")
-        status_label = status_col.selectbox("Status", ["All", "Pending", "Overdue", "Done"])
+                                  format_func=lambda v: "All pets" if v is None else (
+                                      owner.get_pet(v).name + (f" (ID {v})" if sum(p.name == owner.get_pet(v).name for p in owner.pets) > 1 else "")),
+                                  key="calendar_pet")
+        status_label = status_col.selectbox("Status", ["All", "Pending", "Overdue", "Done"], key="calendar_status")
         status = None if status_label == "All" else status_label.lower()
         if selected is None:
             st.info("Choose a date to see the agenda.")
@@ -206,7 +273,7 @@ def calendar_workspace(store, owner):
                 for i, col in enumerate(st.columns(7, gap=None, wrap=False)):
                     day = monday + timedelta(days=i)
                     with col:
-                        st.button(day.strftime("%a %d"), key=f"day_{i}", on_click=select_date, args=(day,),
+                        st.button(day.strftime("%a %d") + (" *" if day == selected else ""), key=f"day_{i}", on_click=select_date, args=(day,),
                                   use_container_width=True, type="primary" if day == selected else "secondary")
                         entries = filter_entries(entries_for_day(owner, day), pet_id, status)
                         for entry in entries[:2]:
@@ -220,10 +287,12 @@ def calendar_workspace(store, owner):
         st.subheader(selected.strftime("%A, %B %d") + " agenda")
         if selected == local_today() and owner.get_all_tasks():
             with st.expander("Today's care summary"):
-                due = Scheduler.get_daily_tasks(owner, include_completed=True)
+                due = [t for t in Scheduler.get_daily_tasks(owner, include_completed=True)
+                       if pet_id is None or t.assigned_pet_id == pet_id]
                 pending = sum(t.status == "pending" for t in due)
                 overdue = sum(t.status == "overdue" for t in due)
-                done = sum(t.last_completed_date == local_today() for t in owner.get_all_tasks())
+                done = sum(t.last_completed_date == local_today() for t in owner.get_all_tasks()
+                           if pet_id is None or t.assigned_pet_id == pet_id)
                 counts = [f"{count} {label}" for count, label in ((pending,"pending"),(overdue,"overdue"),(done,"done")) if count]
                 st.write(" / ".join(counts) if counts else "No tasks due today.")
         for warning in day_conflicts(owner, selected):
@@ -244,55 +313,39 @@ def calendar_workspace(store, owner):
             st.caption("Dashed cards are estimated repeats. Dates can shift after completion.")
 
 
-def settings_page(store, owner):
-    st.title("Settings")
-    with st.container(key="settings_surface"):
-        st.subheader("Your profile")
-        profile_form(store, owner)
-        with st.expander("Local saving and Gemini"):
-            st.text(str(store.path))
-            st.caption("Saved on this computer. No cloud sync or account login.")
-            st.write("Gemini configured" if is_configured() else "Gemini not configured")
-            st.text("Model: " + configuration()[1])
-            st.caption("Set GEMINI_API_KEY in the repository's local .env file. Never share or commit it.")
-            st.caption("One request per preview; 30-second timeout; no automatic retries. Manual entry works without Gemini.")
-
-
 def main():
     try:
-        store = PlannerStore()
-        owner = store.load()
+        root_store = PlannerStore()
+        profiles = root_store.list_profiles()
+        selected = st.session_state.get("active_owner_id")
+        store = PlannerStore(root_store.path, owner_id=selected)
+        owner = store.load() if selected is not None else None
+        if owner is None:
+            st.session_state.active_owner_id = None
+            st.session_state.page = "User"
+        elif st.session_state.get("page") not in ("User", "Pets", "Calendar"):
+            st.session_state.page = "Pets"
+        elif st.session_state.page == "Calendar" and not owner.pets:
+            st.session_state.page = "Pets"
     except (sqlite3.Error, OSError):
         st.error("Local storage is unavailable. Check folder permissions or PAWPAL_DB_PATH, then reload.")
         return
-    if owner is None:
-        st.title("PawPal AI Planner")
-        intro, setup = st.columns([1, 1.2], gap="large")
-        with intro:
-            st.image(favicon(), width=64)
-            st.header("Plan your pet's care")
-            st.write("Keep walks, meals and appointments together. Type what you need, review the details, and save it to your calendar.")
-            st.caption("Start with your profile, add your pets, then plan their care.")
-        with setup:
-            with st.container(key="profile_surface"):
-                st.subheader("Create your local profile")
-                profile_form(store)
+    page = sidebar(owner)
+    if "notice" in st.session_state:
+        st.success(st.session_state.pop("notice"))
+    if page == "User":
+        user_page(root_store, owner, profiles)
         return
     with using_timezone(owner.timezone):
         if "pending_selected_day" in st.session_state:
             select_date(st.session_state.pop("pending_selected_day"))
-        page = sidebar(owner)
-        if "notice" in st.session_state:
-            st.success(st.session_state.pop("notice"))
         if page == "Pets":
             pets_page(store, owner)
-        elif page == "Settings":
-            settings_page(store, owner)
         else:
             calendar_page(store, owner)
-        if st.session_state.get("pet_dialog_open"):
+        if st.session_state.get("pet_dialog_open") and page == "Pets":
             pet_dialog(store)
-        elif st.session_state.get("editor_open") and owner.pets:
+        elif st.session_state.get("editor_open") and owner.pets and page == "Calendar":
             task_dialog(store, owner)
 
 
