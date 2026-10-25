@@ -1,5 +1,6 @@
 """Local, transactional storage for the PawPal domain model."""
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import date, time
 import os
 from pathlib import Path
@@ -52,8 +53,17 @@ def _iso(value):
     return value.isoformat() if value is not None else None
 
 
+@dataclass(frozen=True)
+class LocalProfile:
+    owner_id: int
+    name: str
+    timezone: str
+    pet_count: int
+
+
 class PlannerStore:
-    def __init__(self, path: str | Path | None = None):
+    def __init__(self, path: str | Path | None = None, owner_id: int | None = None):
+        self.owner_id = owner_id
         self.path = Path(path) if path is not None else default_database()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connection() as conn:
@@ -80,8 +90,45 @@ class PlannerStore:
                 conn.rollback()
                 raise
 
-    def _load(self, conn) -> Owner | None:
-        row = conn.execute("SELECT * FROM owner ORDER BY owner_id LIMIT 1").fetchone()
+    @staticmethod
+    def _reserve_ids(conn):
+        # IDs belong to the database, including profiles not currently selected.
+        for table, column, counter in (("owner", "owner_id", _owner_ids),
+                                       ("pet", "pet_id", _pet_ids),
+                                       ("task", "task_id", _task_ids)):
+            counter.reserve(conn.execute(f"SELECT COALESCE(MAX({column}), 0) FROM {table}").fetchone()[0])
+
+    def list_profiles(self) -> list[LocalProfile]:
+        with self.connection() as conn:
+            return [LocalProfile(**dict(row)) for row in conn.execute(
+                "SELECT o.owner_id, o.name, o.timezone, COUNT(p.pet_id) AS pet_count "
+                "FROM owner o LEFT JOIN pet p ON p.owner_id=o.owner_id "
+                "GROUP BY o.owner_id ORDER BY o.owner_id")]
+
+    @staticmethod
+    def _profile_values(name, timezone):
+        name = clean_text(name, "Owner name", 80, True)
+        try:
+            ZoneInfo(timezone)
+        except (ZoneInfoNotFoundError, ValueError, TypeError):
+            raise ValueError("Choose a valid timezone.") from None
+        return name, timezone
+
+    def create_profile(self, name: str, timezone: str = "America/New_York") -> Owner:
+        name, timezone = self._profile_values(name, timezone)
+        with self.transaction() as conn:
+            if any(row[0].casefold() == name.casefold() for row in conn.execute("SELECT name FROM owner")):
+                raise ValueError("That user already exists. Choose them from the saved users.")
+            self._reserve_ids(conn)
+            owner = Owner(name, timezone)
+            conn.execute("INSERT INTO owner VALUES (?, ?, ?)", (owner.owner_id, name, timezone))
+            return self._load(conn, owner.owner_id)
+
+    def _load(self, conn, owner_id=None) -> Owner | None:
+        self._reserve_ids(conn)
+        selected = self.owner_id if owner_id is None else owner_id
+        row = (conn.execute("SELECT * FROM owner WHERE owner_id=?", (selected,)).fetchone()
+               if selected is not None else conn.execute("SELECT * FROM owner ORDER BY owner_id LIMIT 1").fetchone())
         if row is None:
             return None
         owner = Owner(row["name"], row["timezone"])
@@ -91,8 +138,12 @@ class PlannerStore:
             pet = Pet(r["name"], r["species"], r["age"], pet_id=r["pet_id"])
             _pet_ids.reserve(pet.pet_id)
             owner.add_pet(pet)
-        schedules = {r["task_id"]: r for r in conn.execute("SELECT * FROM schedule")}
-        for r in conn.execute("SELECT * FROM task ORDER BY task_id"):
+        schedules = {r["task_id"]: r for r in conn.execute(
+            "SELECT s.* FROM schedule s JOIN task t ON t.task_id=s.task_id "
+            "JOIN pet p ON p.pet_id=t.pet_id WHERE p.owner_id=?", (owner.owner_id,))}
+        for r in conn.execute(
+            "SELECT t.* FROM task t JOIN pet p ON p.pet_id=t.pet_id WHERE p.owner_id=? ORDER BY t.task_id",
+            (owner.owner_id,)):
             pet = owner.find_pet(r["pet_id"])
             if pet is None:
                 continue
@@ -120,11 +171,14 @@ class PlannerStore:
             return self._load(conn)
 
     def _save(self, conn, owner: Owner):
-        # Small single-profile aggregate: replace it atomically, under a write lock.
-        # Readers see either the old complete state or the new complete state.
-        conn.execute("DELETE FROM schedule")
-        conn.execute("DELETE FROM task")
-        conn.execute("DELETE FROM pet")
+        # Replace only this owner's aggregate atomically, under a write lock.
+        # Other local users and concurrent readers retain their complete state.
+        conn.execute("DELETE FROM schedule WHERE task_id IN "
+                     "(SELECT t.task_id FROM task t JOIN pet p ON p.pet_id=t.pet_id WHERE p.owner_id=?)",
+                     (owner.owner_id,))
+        conn.execute("DELETE FROM task WHERE pet_id IN (SELECT pet_id FROM pet WHERE owner_id=?)",
+                     (owner.owner_id,))
+        conn.execute("DELETE FROM pet WHERE owner_id=?", (owner.owner_id,))
         conn.execute(
             "INSERT INTO owner VALUES (?, ?, ?) ON CONFLICT(owner_id) DO UPDATE SET name=excluded.name, timezone=excluded.timezone",
             (owner.owner_id, owner.name, owner.timezone),
@@ -146,13 +200,13 @@ class PlannerStore:
                     ))
 
     def save_profile(self, name: str, timezone: str = "America/New_York") -> Owner:
-        name = clean_text(name, "Owner name", 80, True)
-        try:
-            ZoneInfo(timezone)
-        except (ZoneInfoNotFoundError, ValueError, TypeError):
-            raise ValueError("Choose a valid timezone.") from None
+        name, timezone = self._profile_values(name, timezone)
         with self.transaction() as conn:
-            owner = self._load(conn) or Owner(name, timezone)
+            owner = self._load(conn)
+            if owner is None:
+                if self.owner_id is not None:
+                    raise ValueError("Choose an existing user or create a new one.")
+                owner = Owner(name, timezone)
             owner.name, owner.timezone = name, timezone
             self._save(conn, owner)
             return self._load(conn)
