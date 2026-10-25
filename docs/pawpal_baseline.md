@@ -32,8 +32,8 @@ Setting the owner's name again preserves the registered pets and tasks.
 - `Scheduler.get_daily_tasks(owner)` reads `Owner.get_all_tasks()` and applies
   the daily-view rules. Both the CLI and Streamlit app use this path.
 
-See [the class diagram](class_diagram.md) and its
-[Mermaid source](diagrams/uml_final.mmd).
+See [the class diagram](../class_diagram.md) and its
+[Mermaid source](../diagrams/uml_final.mmd).
 
 ## Smarter Scheduling
 
@@ -180,14 +180,14 @@ overlap checking is claimed.
 6. Select **done** in **Filter by status**, then filter by pet. Change the
    owner's name with **Set Owner**; the pets and tasks remain in the session.
 
-The existing [pet_app.PNG](pet_app.PNG) is a historical screenshot, not evidence
+The existing [pet_app.PNG](../pet_app.PNG) is a historical screenshot, not evidence
 of this update's UI verification.
 
 ## Course sources and scope
 
 - [Current Week 4 Show: PawPal+](https://courses.codepath.org/courses/ai110/unit/4#!projects)
 - [Official starter](https://github.com/codepath/ai110-module2show-pawpal-starter)
-- [Project reflection](reflection.md)
+- [Project reflection](../reflection.md)
 
 The current Show walkthrough specifies time/frequency scheduling, an
 Owner-to-Scheduler data path, sorting, filtering, recurrence, conflicts,
