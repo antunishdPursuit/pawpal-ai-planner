@@ -225,15 +225,8 @@ def task_card(store, owner, entry, prefix, viewer_id=None):
 
 
 def calendar_page(store, owner, owners):
-    heading, actions = st.columns([3, 2], vertical_alignment="center")
-    heading.title("Community calendar")
-    heading.caption(local_today().strftime("%A, %B %d") + " / " + owner.timezone)
-    chosen_pet = st.session_state.get("calendar_pet")
-    if chosen_pet is None or owner.find_pet(chosen_pet) is None:
-        chosen_pet = owner.pets[0].pet_id if owner.pets else None
-    actions.button("Add task", type="primary", on_click=open_editor,
-                   args=(chosen_pet, st.session_state.get("calendar_date") or local_today(), "Conversation"),
-                   disabled=not owner.pets, help="Add a pet first" if not owner.pets else None)
+    st.title("Community calendar")
+    st.caption(local_today().strftime("%A, %B %d") + " / " + owner.timezone)
     calendar_workspace(store, owner, owners)
 
 
@@ -243,14 +236,22 @@ def calendar_workspace(store, owner, owners):
     selected = st.session_state.get("calendar_date") or local_today()
     if "selected_day" not in st.session_state:
         st.session_state.selected_day = selected
+    chosen_pet = st.session_state.get("calendar_pet")
+    if chosen_pet is None or owner.find_pet(chosen_pet) is None:
+        chosen_pet = owner.pets[0].pet_id if owner.pets else None
     with st.container(key="calendar_surface"):
-        with st.container(horizontal=True, vertical_alignment="center"):
-            st.button("Previous day", on_click=select_date, args=(selected - timedelta(days=1),))
-            st.button("Today", on_click=select_date, args=(local_today(),))
-            st.button("Next day", on_click=select_date, args=(selected + timedelta(days=1),))
-            with st.container(key="view_switch", width=230):
+        with st.container(horizontal=True, vertical_alignment="center", key="calendar_toolbar"):
+            with st.container(horizontal=True, wrap=False, vertical_alignment="center", width="content", key="date_navigation"):
+                st.button("Previous day", on_click=select_date, args=(selected - timedelta(days=1),))
+                st.button("Today", on_click=select_date, args=(local_today(),))
+                st.button("Next day", on_click=select_date, args=(selected + timedelta(days=1),))
+            with st.container(key="view_switch", width="content"):
                 view = st.radio("Calendar view", ["Week", "Agenda"], index=0, horizontal=True, label_visibility="collapsed", key="calendar_view")
-        date_col, owner_col, pet_col, status_col = st.columns([1.5, 1.1, 1.1, 1])
+            st.button("Add task", type="primary", key="add_task", on_click=open_editor,
+                      args=(chosen_pet, selected, "Conversation"), disabled=not owner.pets,
+                      help="Add a pet first" if not owner.pets else None)
+        with st.container(key="calendar_filters"):
+            date_col, owner_col, pet_col, status_col = st.columns([1.5, 1.1, 1.1, 1])
         owner_id = owner_col.selectbox("Owner", [None] + [p.owner_id for p in owners],
                                       format_func=lambda value: "All owners" if value is None else next(p.name for p in owners if p.owner_id == value),
                                       key="calendar_owner")
@@ -274,7 +275,7 @@ def calendar_workspace(store, owner, owners):
                 for i, col in enumerate(st.columns(7, gap=None, wrap=False)):
                     day = monday + timedelta(days=i)
                     with col:
-                        st.button(day.strftime("%a %d") + (" *" if day == selected else ""), key=f"day_{i}", on_click=select_date, args=(day,),
+                        st.button(day.strftime("%a %d"), key=f"day_{i}", on_click=select_date, args=(day,),
                                   use_container_width=True, type="primary" if day == selected else "secondary")
                         entries = filter_entries(community_entries(owners, day, owner.timezone, owner_id), pet_id, status)
                         for entry in entries[:2]:
