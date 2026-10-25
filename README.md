@@ -1,6 +1,6 @@
 # PawPal AI Planner
 
-A local pet-care calendar with Gemini-assisted task planning. Describe a task, review the proposed pet/date/time/location, and confirm before anything is saved.
+A local community pet-care calendar with Gemini-assisted task planning. Describe a task, review the proposed pet/date/time/location, and confirm before anything is saved.
 
 This extends [PawPal+](https://github.com/antunishdPursuit-coursework-archive/ai110-module2show-pawpal-starter), the AI110 Module 2 Show. The original Python/Streamlit app registers pets, creates recurring care tasks, and shows a daily plan across pets. Its scheduler sorts by time, filters by pet/status, warns about matching start times, and creates daily/weekly next occurrences while custom routines advance in place.
 
@@ -25,13 +25,26 @@ Dependencies are pinned to the versions verified in this build. Credentials and 
 
 ## Use the planner
 
-- **User:** the only enabled destination before choosing a local user. Select an existing user or create a name/timezone profile. The clickable current-user control in the sidebar opens this page to change users or update timezone. Names are displayed as identity, not an owner-renaming form. Switching users clears the previous user's temporary draft and conversation after a visible warning.
-- **Pets:** the first screen after selecting a user. Register pets here; the calendar stays unavailable until a pet exists. Saving a pet opens Calendar. Pet registration is not repeated on Calendar.
-- **Calendar:** large week cells or a daily agenda, Previous day/Today/Next day, selected date and pet/status filters. The week grid scrolls horizontally on smaller screens; the page scrolls vertically to the agenda. Care counts are secondary, inside a disclosure, without an all-zero strip. Navigation lives only in the collapsible sidebar at every width.
-- **Plan with PawPal:** type one care task at a time. Gemini uses the selected user's pets, local date/timezone, and a bounded snapshot of unfinished tasks. Missing or ambiguous information prompts clarification. Replacing an existing draft requires explicit consent.
+- **Current user:** click the sidebar name to choose another local user. When none exist, choose **Add user**. Select an existing user or create a name/timezone profile. The clickable current-user control in the sidebar opens this page to change users or update timezone. Names are displayed as identity, not an owner-renaming form. Switching users clears the previous user's temporary draft and conversation after a visible warning.
+- **Pets:** the first screen after selecting a user. Register pets here; the shared calendar becomes available when any local user has a pet. Task creation requires a pet belonging to the current user. Saving a pet opens Calendar. Each pet card links to its filtered calendar.
+- **Community calendar:** all local owners and pets, with owner/pet/status filters, large week cells or a daily agenda, and Previous day/Today/Next day controls. Timed tasks convert to the current user's timezone; Anytime tasks keep their care date. Each task names its pet and owner. Everyone can view schedules; only the current user's tasks can be created or completed. The week grid scrolls horizontally on smaller screens; the page scrolls vertically to the agenda. Care counts are secondary, inside a disclosure, without an all-zero strip. Navigation lives only in the collapsible sidebar at every width.
+- **Add task:** one button opens **Conversation** or **Manual**. In Conversation, type one care task at a time. Gemini uses the selected user's pets, local date/timezone, and a bounded snapshot of unfinished tasks. Missing or ambiguous information prompts clarification. Replacing an existing draft requires explicit consent.
 - **Review your task:** edit pet, title, date, time/Anytime, repeat, description and location, then select **Confirm and save**. **Keep draft** closes without a write and retains temporary edits. **Start over** discards the draft and conversation while retaining the chosen calendar context. Implicit Escape/outside-click dismissal is disabled because it could lose a focused field's uncommitted edit.
-- **Add task manually:** the same editable confirmation and validation without Gemini. The selected calendar date and pet supply the defaults.
+- **Manual:** the same editable confirmation and validation without Gemini. The selected date and an owned pet supply the defaults.
 - **Task details:** mark done when due; open a map search for a confirmed location. A conflict requires an explicit choice to keep the time.
+
+### Voice
+
+Inside Conversation:
+
+- **Dictate:** allow the microphone, speak, then **Stop**. Gemini 3.8 Flash transcribes the recording into editable request text. Check names and dates before creating the preview.
+- **Talk live → Start live:** start a two-way conversation with Gemini 3.8 Live. **Review task** stops the conversation and opens a validated editable preview. **Stop** also ends the session. Confirm the task separately to save it.
+
+The assistant knows the selected user and their pets. It can describe the local user list, but cannot change users, register pets, or schedule for another owner. Use the sidebar to change users first.
+
+Voice needs a supported browser, microphone permission, network and a configured Gemini key. Dictation is limited to 30 seconds, live sessions to 3 minutes. Ending the dialog, changing modes/users or stopping releases the microphone, connection and playback. Typed/manual entry remains available.
+
+Live credentials are created server-side, restricted to the selected user's model/context/tools, usable once, and expire quickly. The long-lived API key never goes to the browser. Users/pets/tasks are saved in local SQLite, not as profiles in Gemini. Audio is sent only through the voice actions; transcripts and drafts remain temporary app state.
 
 Daily and weekly completion retains the completed occurrence and creates one next occurrence from the completion date. Custom routines update the same task and retain their latest completion date. Repeating tasks are not advanced by viewing the calendar. Planned future repeats are estimates; completing late can shift them.
 
@@ -48,7 +61,7 @@ Overdue items keep their actual due date. Untimed tasks appear as Anytime. Calen
 
 SQLite stores Owner, Pet, Task, and optional Schedule. Status is derived from date/completion rather than stored as a stale flag. Creation request IDs make repeated confirmation idempotent. Loading reserves IDs across all profiles so a new record cannot reuse another user's ID; saving replaces only the selected owner's aggregate under a transaction.
 
-Windows default database: `%LOCALAPPDATA%\PawPalAIPlanner\pawpal.sqlite3`. Other systems use `~/.local/share/PawPalAIPlanner/pawpal.sqlite3`. For a separate local database, set `PAWPAL_DB_PATH` before starting the app. Multiple local users share this database, with owner-scoped pets, tasks and schedules. This is a local profile switcher, not authentication: anyone using this app on the device can select another local user. It is not a hosted multi-user service.
+Windows default database: `%LOCALAPPDATA%\PawPalAIPlanner\pawpal.sqlite3`. Other systems use `~/.local/share/PawPalAIPlanner/pawpal.sqlite3`. For a separate local database, set `PAWPAL_DB_PATH` before starting the app. Multiple local users share this database. Calendar reads span owners; creation and completion remain owner-scoped. This is a local profile switcher, not authentication: anyone using this app on the device can select another local user. It is not a hosted multi-user service.
 
 ## Actual interaction evidence
 
@@ -143,6 +156,16 @@ Zoom was checked with Chromium device metrics: a half-size CSS viewport and doub
 
 The three live cases are a small manual evaluation, not an accuracy benchmark. Simulated malformed responses and failures are separate from live-provider evidence. See [model_card.md](model_card.md) for limitations and collaboration decisions.
 
+### Community and voice verification — October 25
+
+The six original tests pass unchanged; no test files were added. Disposable checks verified shared owner-labeled schedules, cross-date timezone conversion, owner-only completion/task selection, foreign-pet rejection, typed text retention after live dialogue, invalid voice-event handling, one-use/owner-bound credentials, and confirmation before saving a voice proposal.
+
+Actual provider checks used synthetic speech, without capturing the user's microphone. Gemini 3.8 Flash initially heard the pet name as “Machi”; adding the registered name as a spelling hint yielded “Mochi” on the follow-up. This is observed improvement, not a guarantee. The editable transcript remains necessary.
+
+One real Gemini 3.8 Live session returned greeting audio, accepted 16 kHz synthetic speech, returned a spoken reply and a valid October 26 / 08:00 / Mochi / Central Park preview. The temporary database remained unchanged before confirmation. Separate app checks confirmed that an approved voice proposal saved only after explicit confirmation and only for its owner.
+
+Browser checks verified the shared calendar, simplified navigation, the single Add task action, visible microphone controls, and the credential-to-Start live handoff. At 320px the dialog had no horizontal overflow. Physical microphone capture, actual speaker playback/echo and user barge-in remain a device acceptance check; the synthetic/provider tests do not establish them.
+
 ## Reliability, privacy and tradeoffs
 
 - Gemini has no storage, deletion, shell, or arbitrary tool access. Parsed output is not a saved task.
@@ -152,9 +175,9 @@ The three live cases are a small manual evaluation, not an accuracy benchmark. S
 - SQLite transactions protect saves/completion. After a failure, drafts remain available; the UI does not report a failed write as saved.
 - A map link is an encoded Google Maps search from confirmed text, not an AI-generated URL or a verified address.
 - Confirmed data stays on the computer. Gemini receives the typed request, recent conversation and bounded pet/task context; Google receives a location when you open its map link.
-- No cloud sync, reminders, route planning, veterinary advice, duration-aware optimization, voice or guided tour. Pet/task deletion and editing existing tasks are not new UI features in this version.
+- No cloud sync, reminders, route planning, veterinary advice, duration-aware optimization or guided tour. Pet/task deletion and editing existing tasks are not new UI features in this version.
 - The original CLI and domain methods remain. The historical `reflection.md` belongs to the base project; this extension's responsible-AI record is `model_card.md`.
 
 ## Sources
 
-[AI110 Applied AI System instructions](https://courses.codepath.org/courses/ai110/unit/8#!projects), [Google Gen AI Python SDK](https://googleapis.github.io/python-genai/), [Gemini structured output](https://ai.google.dev/gemini-api/docs/generate-content/structured-output), [Gemini 3.8 Flash](https://ai.google.dev/gemini-api/docs/models/gemini-3.8-flash), [Streamlit configuration](https://docs.streamlit.io/develop/api-reference/configuration/config.toml).
+[AI110 Applied AI System instructions](https://courses.codepath.org/courses/ai110/unit/8#!projects), [Google Gen AI Python SDK](https://googleapis.github.io/python-genai/), [Gemini structured output](https://ai.google.dev/gemini-api/docs/generate-content/structured-output), [Gemini 3.8 Flash](https://ai.google.dev/gemini-api/docs/models/gemini-3.8-flash), [Streamlit configuration](https://docs.streamlit.io/develop/api-reference/configuration/config.toml), [Gemini Live](https://ai.google.dev/gemini-api/docs/live-api), [Live ephemeral tokens](https://ai.google.dev/gemini-api/docs/live-api/ephemeral-tokens), [Streamlit components v2](https://docs.streamlit.io/develop/concepts/custom-components/components-v2).

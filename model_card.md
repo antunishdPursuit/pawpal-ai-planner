@@ -2,7 +2,7 @@
 
 ## Purpose and model
 
-A local pet-care planning assistant extending PawPal+. Gemini 3.8 Flash proposes one structured care task; the owner reviews an editable preview and confirms the save. This is a bounded human-confirmed workflow, not an autonomous assistant. It does not train or fine-tune a model.
+A local pet-care planning assistant extending PawPal+. Gemini 3.8 Flash handles typed task proposals and dictation, and Gemini 3.8 Live supports spoken dialogue and task previews; the owner reviews an editable preview and confirms the save. This is a bounded human-confirmed workflow, not an autonomous assistant. It does not train or fine-tune a model.
 
 The model receives the request, up to six recent conversation messages, up to 50 registered pet names/IDs, and up to 30 unfinished task summaries. It uses the profile's local date/timezone. Gemini access and quotas depend on the configured Google API project.
 
@@ -57,7 +57,7 @@ Review also found that a follow-up clarification could leave an earlier preview 
 
 Accepted design: a separate repository, a four-table local data model, User/Pets/Calendar navigation with pet-first onboarding, and an editable confirmation between Gemini and storage. This preserves the original coursework and makes the write decision visible to the owner.
 
-Revised scope: the earlier voice and guided-tour ideas were deferred. This version concentrates on typed planning, calendar use, confirmed location links and local persistence. Additional saved tests were excluded at Dennis's direction; the original six were retained and new behavior was checked without new test files.
+Revised scope: the guided tour remains deferred. Voice was later approved and implemented as described below. This version concentrates on typed planning, calendar use, confirmed location links and local persistence. Additional saved tests were excluded at Dennis's direction; the original six were retained and new behavior was checked without new test files.
 
 The AI helped inspect the base project, propose the data flow, implement increments and exercise synthetic cases. Dennis selected Gemini and approved the layout, preservation boundaries and commit workflow. The observed implementation and evaluation above document this collaboration; they do not invent an earlier personal experience or claim that Dennis has already tested the finished app.
 
@@ -68,3 +68,13 @@ October 25: the normal app's stale stylesheet was corrected and its scrolling/na
 A next-day timezone browser check and live Gemini request used Pacific/Kiritimati. `Feed Pip tomorrow at 8 AM at home.` correctly proposed October 27 from local October 26. No task was saved before confirmation; the edited title, pet, date, time and location matched readback afterward. Fixtures remained separate from real user data. The normal database matched its pre-change records.
 
 Browser follow-up covered five widths from 320 to 1280px, horizontal week scrolling without page overflow, sidebar recovery, keyboard controls, and the same 200% zoom-equivalent method described above. Source review prompted corrections to draft replacement consent, date callbacks, mode selection, and input retention. Focused-field loss on Escape was reproduced; implicit dismissal is disabled. Keep draft retains edits/request text, and Start over retains the selected calendar context while clearing the draft. Six original tests remain unchanged and pass; no new test files were added. This supersedes the earlier Escape-dismissal and mobile-tab descriptions, without claiming a full accessibility audit.
+
+## Community and voice follow-up
+
+The calendar is shared across local users, while task creation/completion and AI previews are limited to the selected user's pets. Owner/pet labels and filters distinguish records. Timed occurrences convert to the viewer's timezone; Anytime retains a care date. This local identity choice is not authentication.
+
+Voice context contains the selected user, their registered pets, current local date/timezone, bounded dialogue, and up to 25 local user names/pet counts. Dictation uses up to 50 registered pet names as spelling hints. Gemini Live can only propose a task through a restricted preview function; application validation and explicit confirmation still gate every write. A foreign pet cannot silently become the selected user's first pet.
+
+The API key stays server-side. The browser receives a one-use, owner/config-bound Live token with a two-minute connection window and five-minute expiry; stale/used tokens are refreshed. Microphone and playback stop on Stop, review, unmount or a mode/user change. Dictation recordings are bounded to 30 seconds and live sessions to three minutes. No automatic provider retries are added. Audio and transcripts are temporary app data, not saved task/profile records; Gemini's provider policies still govern data sent to its service.
+
+Actual synthetic-speech evaluation: dictation first transcribed Mochi as Machi, then used the supplied pet-name hint correctly in the follow-up. Human review remains necessary. A real Live session produced greeting audio, accepted 16 kHz synthetic speech, returned reply audio and a valid next-day 08:00/Mochi/Central Park draft, with zero unconfirmed writes. Disposable app checks verified malformed/foreign proposals, text retention and owner-only confirmed saving. Browser checks verified the control handoff and a 320px dialog without horizontal overflow. Actual microphone/speaker, echo and barge-in checks await device use; no broader speech-accuracy or accessibility benchmark is claimed.
