@@ -11,7 +11,7 @@ from planner_clock import local_today, using_timezone
 from planner_storage import PlannerStore
 from task_editor import show_editor, open_editor, map_search_url
 from gemini_planner import is_configured, configuration
-from ui_components import summary, task_summary, calendar_chip, empty_panel, brand
+from ui_components import task_summary, calendar_chip, empty_panel, brand
 
 st.set_page_config(page_title="PawPal AI Planner", page_icon=favicon(), layout="wide", initial_sidebar_state="auto")
 apply_theme()
@@ -19,14 +19,6 @@ apply_theme()
 
 def navigate(page):
     st.session_state.page = page
-
-
-def sync_mobile_navigation():
-    value = st.session_state.get("mobile_page")
-    if value:
-        st.session_state.page = value
-    else:
-        st.session_state.mobile_page = st.session_state.page
 
 
 def select_date(day):
@@ -180,9 +172,7 @@ def calendar_page(store, owner):
                           args=(owner.pets[0].pet_id, st.session_state.get("calendar_date") or local_today(), "Conversation"))
                 st.button("Add task manually", on_click=open_editor,
                           args=(owner.pets[0].pet_id, st.session_state.get("calendar_date") or local_today(), "Manual"))
-        due = Scheduler.get_daily_tasks(owner, include_completed=True)
-        summary(sum(t.status == "pending" for t in due), sum(t.status == "overdue" for t in due),
-                sum(t.last_completed_date == local_today() for t in owner.get_all_tasks()))
+
     else:
         empty_panel("Your care plan starts with a pet", "Add your pet to schedule walks, meals and appointments. Confirm each task before it enters your calendar.")
         st.button("Add your first pet", on_click=show_pet_dialog, type="primary")
@@ -228,6 +218,14 @@ def calendar_workspace(store, owner):
                         if len(entries) > 2:
                             st.caption(f"+{len(entries)-2} more in agenda")
         st.subheader(selected.strftime("%A, %B %d") + " agenda")
+        if selected == local_today() and owner.get_all_tasks():
+            with st.expander("Today's care summary"):
+                due = Scheduler.get_daily_tasks(owner, include_completed=True)
+                pending = sum(t.status == "pending" for t in due)
+                overdue = sum(t.status == "overdue" for t in due)
+                done = sum(t.last_completed_date == local_today() for t in owner.get_all_tasks())
+                counts = [f"{count} {label}" for count, label in ((pending,"pending"),(overdue,"overdue"),(done,"done")) if count]
+                st.write(" / ".join(counts) if counts else "No tasks due today.")
         for warning in day_conflicts(owner, selected):
             st.warning(warning)
         if selected == local_today():
@@ -284,11 +282,6 @@ def main():
         if "pending_selected_day" in st.session_state:
             select_date(st.session_state.pop("pending_selected_day"))
         page = sidebar(owner)
-        if st.session_state.get("mobile_page") != page:
-            st.session_state.mobile_page = page
-        with st.container(key="mobile_nav"):
-            st.segmented_control("Navigation", ["Calendar", "Pets", "Settings"],
-                                 key="mobile_page", default=None, on_change=sync_mobile_navigation)
         if "notice" in st.session_state:
             st.success(st.session_state.pop("notice"))
         if page == "Pets":
