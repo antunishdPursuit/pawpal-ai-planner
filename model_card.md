@@ -17,7 +17,7 @@ The model receives the request, up to six recent conversation messages, up to 50
 - Planned repeats are estimates based on the current due date (or today for overdue work). Actual future dates can shift after late completion.
 - Daily/weekly completed occurrences remain in history. Custom routines retain their latest completion rather than a separate full event log.
 - Local data is not cloud-synced. There is no multi-user authentication or hosted-service security boundary.
-- Narrow-screen/zoom and a full keyboard accessibility audit remain unverified beyond implemented responsive/focus rules.
+- Layout and primary keyboard workflows were checked at narrow widths and 200% zoom-equivalent reflow. A complete screen-reader/assistive-technology and WCAG conformance audit has not been performed.
 
 ## Misuse and guardrails
 
@@ -40,6 +40,10 @@ October 24, 2026: the six unchanged original tests passed. No tests were added. 
 A separate real Chrome run confirmed an October 25, 09:00 Central Park task after a live Gemini preview. Readback showed one additional task only after confirmation. All live evaluation fixtures used temporary databases, not the normal user database.
 
 These three synthetic model scenarios are a small manual check, not a general accuracy or safety guarantee. Malformed-output and failure checks used simulated responses. No broader language, veterinary-safety, adversarial, accessibility or multi-user benchmark is claimed.
+
+October 25 UX follow-up: 320/390/768/1280px browser layouts had no horizontal page/content overflow. A 720x500 CSS viewport at 2x pixel density checked 200% zoom-equivalent reflow; native browser zoom shortcuts were not the method used. Tab/Shift+Tab, modal focus containment, Escape preservation and focus return, keyboard filters/navigation/time entry, confirmation and completion were exercised. The off-screen mobile dialog/footer was corrected.
+
+A further live Gemini request at 320px generated an October 26, 11:00 Central Park task. The temporary database stayed unchanged until keyboard confirmation saved the edited title, then readback verified the fields. No test files were added, and normal user data was not used.
 
 ## Testing observations
 

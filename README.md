@@ -25,9 +25,9 @@ Dependencies are pinned to the versions verified in this build. Credentials and 
 
 ## Use the planner
 
-- **Calendar:** Week or Agenda, Today/Previous/Next, selected date, pet/status filters, and daily Pending/Overdue/Done today counts.
+- **Calendar:** framed week cells or a daily agenda, Previous day/Today/Next day, selected date, pet/status filters, and a compact daily care summary. Desktop uses a navigation rail; phones have direct Calendar/Pets/Settings tabs.
 - **Plan with PawPal:** type one care task at a time. Gemini uses registered pet IDs, the local date/timezone, and a bounded snapshot of unfinished tasks. Missing or ambiguous information prompts clarification.
-- **Review your task:** edit pet, title, date, time/Anytime, repeat, description, and location. Select **Confirm and save**. Cancel writes nothing.
+- **Review your task:** a focused dialog with editable pet, title, date, time/Anytime, repeat, description, and location. Select **Confirm and save**. Cancel discards the draft without writing; Escape closes the dialog and preserves it.
 - **Add task manually:** the same editable confirmation and validation without Gemini.
 - **Task details:** Mark done when due; open a map search for a confirmed location. A conflict requires an explicit choice to keep the time.
 - **Pets:** register and inspect pets. IDs distinguish pets with the same name.
@@ -127,7 +127,15 @@ New behavior was checked with disposable databases, in-memory Streamlit app runs
 | New clarification after an earlier preview | Previous draft retained; confirmation blocked until resolved or explicitly reviewed in Manual |
 | Profile, pet entry, navigation, completion | In-memory app runs passed |
 | Desktop browser layout and labels | Inspected with temporary sample data |
-| Narrow-screen layout, 200% zoom, full keyboard audit | Responsive rules implemented; dedicated visual/accessibility verification not yet completed |
+| 320, 390, 768 and 1280 CSS-pixel widths | Passed; document width matched viewport and main content had no horizontal overflow |
+| 200% zoom-equivalent reflow | Passed at 720x500 CSS pixels with 2x pixel density (1440x1000 physical equivalent); agenda and dialog actions fit |
+| Keyboard primary workflows | Tab/Shift+Tab, visible focus, modal focus containment, Escape/draft preservation/focus return, Space/arrow selection, Enter save and completion passed |
+| Mobile navigation and calendar state | Calendar/Pets/Settings activated by keyboard; selected date retained across page changes |
+| Reduced-motion preference | Emulated preference matched; computed transitions were 0s |
+
+An October 25 UX review replaced the sparse default layout with a framed calendar, compact summary, pet-colored task previews, desktop navigation rail, mobile tabs and focused task dialogs. Browser checks found and corrected an off-screen dialog footer. A live Gemini request at 320px produced a valid October 26, 11:00 Central Park preview; the isolated database remained at eight tasks until an edited-title keyboard confirmation saved the ninth. Separate keyboard completion created the expected next daily occurrence.
+
+Zoom was checked with Chromium device metrics: a half-size CSS viewport and doubled pixel density. This verifies 200% reflow behavior; it is not a claim that a native browser zoom shortcut was exercised. Keyboard checks cover the primary app workflows, not a full assistive-technology or WCAG conformance audit.
 
 The three live cases are a small manual evaluation, not an accuracy benchmark. Simulated malformed responses and failures are separate from live-provider evidence. See [model_card.md](model_card.md) for limitations and collaboration decisions.
 
