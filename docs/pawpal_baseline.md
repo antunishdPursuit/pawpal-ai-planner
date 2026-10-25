@@ -180,7 +180,7 @@ overlap checking is claimed.
 6. Select **done** in **Filter by status**, then filter by pet. Change the
    owner's name with **Set Owner**; the pets and tasks remain in the session.
 
-The existing [pet_app.PNG](../pet_app.PNG) is a historical screenshot, not evidence
+The existing [pet_app.png](../assets/pet_app.png) is a historical screenshot, not evidence
 of this update's UI verification.
 
 ## Course sources and scope

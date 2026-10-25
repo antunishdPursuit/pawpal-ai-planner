@@ -2,7 +2,7 @@
 
 The diagram matches the current implementation in `pawpal_system.py`.
 The required Mermaid source is [diagrams/uml_final.mmd](diagrams/uml_final.mmd).
-The existing PNG is an earlier diagram; use this source for the current design.
+The [historical PNG](assets/uml_final.png) is an earlier diagram; use this source for the current design.
 
 ```mermaid
 classDiagram
