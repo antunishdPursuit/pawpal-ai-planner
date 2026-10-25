@@ -101,6 +101,9 @@ def user_page(store, owner, profiles):
                     else:
                         st.session_state.notice = "Timezone saved. Task times remain local wall times."
                         st.rerun()
+        if (has_draft_content(st.session_state.get("task_draft"))
+                or st.session_state.get("conversation") or st.session_state.get("pending_request")):
+            st.warning("Selecting or creating another user discards your unsaved draft and conversation.")
         if profiles:
             others = [p for p in profiles if owner is None or p.owner_id != owner.owner_id]
             if others:
@@ -108,15 +111,11 @@ def user_page(store, owner, profiles):
                 selected = st.selectbox("Saved users", [p.owner_id for p in others],
                                        format_func=lambda value: next(p.name for p in others if p.owner_id == value),
                                        key="user_choice")
-                if has_draft_content(st.session_state.get("task_draft")) or st.session_state.get("conversation"):
-                    st.warning("Changing users discards the current unsaved task draft and conversation.")
                 if st.button("Use this user", type="primary"):
                     activate_profile(selected)
                     st.rerun()
         with st.expander("Add a new local user", expanded=not profiles):
             st.caption("A name and timezone are all you need. No password or sign-in.")
-            if has_draft_content(st.session_state.get("task_draft")) or st.session_state.get("conversation"):
-                st.warning("Creating a user discards the current unsaved task draft and conversation.")
             profile_form(store)
     with st.expander("Local saving and Gemini"):
         st.caption("Data is saved on this computer, without cloud sync. Local users are not password-protected.")
