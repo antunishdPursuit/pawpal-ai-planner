@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from datetime import date, time, timedelta
 from enum import Enum
 from typing import Optional
+from planner_clock import local_today
 
 
 class ScheduleType(Enum):
@@ -33,7 +34,7 @@ class Schedule:
 
     def is_due_today(self) -> bool:
         """Return True if the task is due today or is overdue."""
-        return self.next_due_date <= date.today()
+        return self.next_due_date <= local_today()
 
 
 class _IDCounter:
@@ -44,6 +45,9 @@ class _IDCounter:
     def next(self) -> int:
         self._count += 1
         return self._count
+
+    def reserve(self, used_id: int):
+        self._count = max(self._count, used_id)
 
 
 _pet_ids = _IDCounter()
@@ -60,18 +64,25 @@ class Task:
     time_of_day: Optional[time] = None          # e.g. time(7, 0) for 7:00am
     task_id: int = field(default_factory=_task_ids.next)
     last_completed_date: Optional[date] = None
+    one_off_due_date: Optional[date] = None
+    location_text: str = ""
+    creation_request_id: Optional[str] = None
+
+    @property
+    def due_date(self) -> Optional[date]:
+        return self.schedule.next_due_date if self.schedule else self.one_off_due_date
 
     @property
     def status(self) -> str:
         """Derive task status from completion and schedule: done, overdue, or pending."""
-        today = date.today()
+        today = local_today()
         if self.last_completed_date is not None:
             # Daily/weekly tasks are individual occurrences; keep completed history.
             if not self.schedule or self.schedule.schedule_type != ScheduleType.CUSTOM:
                 return "done"
             if self.last_completed_date == today:
                 return "done"
-        if self.schedule and self.schedule.next_due_date < today:
+        if self.due_date is not None and self.due_date < today:
             return "overdue"
         return "pending"
 
@@ -83,16 +94,16 @@ class Task:
         """
         if self.status == "done":
             return False
-        self.last_completed_date = date.today()
+        self.last_completed_date = local_today()
         if self.schedule and self.schedule.schedule_type == ScheduleType.CUSTOM:
-            self.schedule.next_due_date = date.today() + timedelta(days=self.schedule.interval)
+            self.schedule.next_due_date = local_today() + timedelta(days=self.schedule.interval)
         return True
 
     def next_occurrence(self) -> Optional["Task"]:
         """Return a new Task instance for the next recurrence, or None if not recurring."""
         if not self.schedule:
             return None
-        completed_on = self.last_completed_date or date.today()
+        completed_on = self.last_completed_date or local_today()
         next_start = completed_on + timedelta(days=self.schedule.interval)
         new_schedule = Schedule(
             schedule_type=self.schedule.schedule_type,
@@ -104,7 +115,8 @@ class Task:
             description=self.description,
             assigned_pet_id=self.assigned_pet_id,
             schedule=new_schedule,
-            time_of_day=self.time_of_day
+            time_of_day=self.time_of_day,
+            location_text=self.location_text
         )
 
     def update_task(self, title: str = None, description: str = None, schedule: Schedule = None):
@@ -129,6 +141,7 @@ class Task:
             "due_today": self.schedule.is_due_today() if self.schedule else "no schedule",
             "next_due": str(self.schedule.next_due_date) if self.schedule else "N/A",
             "last_completed": str(self.last_completed_date) if self.last_completed_date else "never",
+            "location": self.location_text,
         }
 
 
@@ -168,15 +181,16 @@ class Pet:
         due = [
             t for t in self.tasks
             if t.status != "done"
-            and (t.schedule is None or t.schedule.is_due_today())
+            and (t.due_date is None or t.due_date <= local_today())
         ]
         return sorted(due, key=lambda t: (t.time_of_day is None, t.time_of_day))
 
 
 class Owner:
-    def __init__(self, name: str):
+    def __init__(self, name: str, timezone: str = "America/New_York"):
         self.owner_id: int = _owner_ids.next()
         self.name = name
+        self.timezone = timezone
         self.pets: list[Pet] = []
 
     def add_pet(self, pet: Pet):
@@ -243,13 +257,13 @@ class Scheduler:
         Unscheduled tasks are available today. Future occurrences and older
         completed history stay outside the daily view.
         """
-        today = date.today()
+        today = local_today()
         daily_tasks = []
         for task in owner.get_all_tasks():
             if task.status == "done":
                 if include_completed and task.last_completed_date == today:
                     daily_tasks.append(task)
-            elif task.schedule is None or task.schedule.is_due_today():
+            elif task.due_date is None or task.due_date <= today:
                 daily_tasks.append(task)
         return Scheduler.sort_by_time(daily_tasks)
 
@@ -325,19 +339,19 @@ if __name__ == "__main__":
         title="Feed",
         description="Morning kibble",
         assigned_pet_id=dog.pet_id,
-        schedule=Schedule(ScheduleType.DAILY, start_date=date.today())
+        schedule=Schedule(ScheduleType.DAILY, start_date=local_today())
     )
     walk_dog = Task(
         title="Walk",
         description="30 min walk around the block",
         assigned_pet_id=dog.pet_id,
-        schedule=Schedule(ScheduleType.CUSTOM, start_date=date.today(), interval=2)
+        schedule=Schedule(ScheduleType.CUSTOM, start_date=local_today(), interval=2)
     )
     feed_cat = Task(
         title="Feed",
         description="Wet food twice daily",
         assigned_pet_id=cat.pet_id,
-        schedule=Schedule(ScheduleType.DAILY, start_date=date.today())
+        schedule=Schedule(ScheduleType.DAILY, start_date=local_today())
     )
 
     dog.add_task(feed_dog)
