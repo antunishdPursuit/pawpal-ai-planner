@@ -29,21 +29,22 @@ def empty_panel(title, body):
                 unsafe_allow_html=True)
 
 
-def task_summary(task, pet, state):
+def task_summary(task, pet, state, owner_name=""):
     tone = ["", "blue", "rust"][(pet.pet_id - 1) % 3]
     status = "warning" if state == "Overdue" else "success" if state == "Done" else ""
     st.markdown(
         f'<div class="paw-task-title">{escape(task.title)}</div>'
-        f'<span class="paw-pet {tone}">{escape(pet.name)}</span> '
+        f'<span class="paw-pet {tone}">{escape(pet.name + (" / " + owner_name if owner_name else ""))}</span> '
         f'<span class="paw-state {status}">{escape(state)}</span>', unsafe_allow_html=True,
     )
 
 
 def calendar_chip(entry, pet, color):
-    at = entry.task.time_of_day.strftime("%I:%M %p").lstrip("0") if entry.task.time_of_day else "Anytime"
+    at_value = entry.display_time or entry.task.time_of_day
+    at = at_value.strftime("%I:%M %p").lstrip("0") if at_value else "Anytime"
     planned = " / planned" if entry.projected else ""
     st.markdown(
         f'<div class="paw-chip {color} {"projected" if entry.projected else ""}">'
         f'<small>{escape(at + planned)}</small><strong>{escape(entry.task.title)}</strong>'
-        f'<small>{escape(pet.name)}</small></div>', unsafe_allow_html=True,
+        f'<small>{escape(pet.name + (" / " + entry.owner_name if entry.owner_name else ""))}</small></div>', unsafe_allow_html=True,
     )

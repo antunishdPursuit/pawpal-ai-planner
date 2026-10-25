@@ -1,11 +1,12 @@
 """PawPal AI Planner: a calendar workspace with human-confirmed task creation."""
+from copy import copy
 from datetime import timedelta
 import sqlite3
 from zoneinfo import available_timezones
 
 import streamlit as st
 from app_theme import apply_theme, favicon
-from calendar_view import CalendarEntry, entries_for_day, filter_entries, day_conflicts
+from calendar_view import CalendarEntry, entries_for_day, filter_entries, day_conflicts, community_entries, community_overdue
 from pawpal_system import Scheduler
 from planner_clock import local_today, using_timezone
 from planner_storage import PlannerStore
@@ -22,6 +23,7 @@ def navigate(page):
 
 
 def pet_calendar(pet_id):
+    st.session_state.calendar_owner = st.session_state.active_owner_id
     st.session_state.calendar_pet = pet_id
     navigate("Calendar")
 
@@ -63,7 +65,7 @@ def activate_profile(owner_id):
         if key.startswith("replace_") or key.startswith("request_") or (draft_prefix and key.startswith(draft_prefix)):
             st.session_state.pop(key, None)
     for key in ("calendar_date", "selected_day", "pending_selected_day", "calendar_pet",
-                "calendar_status", "calendar_view", "pet_name", "pet_species", "pet_age", "notice"):
+                "calendar_status", "calendar_owner", "calendar_view", "pet_name", "pet_species", "pet_age", "notice"):
         st.session_state.pop(key, None)
     st.session_state.pet_dialog_open = False
     st.session_state.active_owner_id = owner_id
@@ -158,7 +160,7 @@ def sidebar(owner, profiles):
                           args=("User",), use_container_width=True)
         with st.container(key="workspace_nav"):
             for page, icon in (("Pets", ":material/pets:"), ("Calendar", ":material/calendar_month:")):
-                enabled = page == "User" or (owner is not None and (page == "Pets" or bool(owner.pets)))
+                enabled = page == "User" or (owner is not None and (page == "Pets" or any(p.pet_count for p in profiles)))
                 st.button(page, icon=icon, on_click=navigate, args=(page,), key=f"nav_{page}",
                           disabled=not enabled, use_container_width=True,
                           help=("Choose a user first" if owner is None else "Add a pet first") if not enabled else None,
@@ -186,17 +188,18 @@ def pets_page(store, owner):
                               on_click=pet_calendar, args=(pet.pet_id,))
 
 
-def task_card(store, owner, entry, prefix):
+def task_card(store, owner, entry, prefix, viewer_id=None):
     task = entry.task
     pet = owner.get_pet(task.assigned_pet_id)
     with st.container(border=True, key=f"care_{prefix}_{task.task_id}"):
-        at = task.time_of_day.strftime("%I:%M %p").lstrip("0") if task.time_of_day else "Anytime"
+        at_value = entry.display_time or task.time_of_day
+        at = at_value.strftime("%I:%M %p").lstrip("0") if at_value else "Anytime"
         state = "Planned repeat" if entry.projected else entry.status.capitalize()
         clock, content, action = st.columns([1.1, 5, 1.5], vertical_alignment="center")
         clock.markdown(f'<div class="paw-time">{at}</div>', unsafe_allow_html=True)
         with content:
-            task_summary(task, pet, state)
-        if not entry.projected and entry.status != "done" and (task.due_date is None or task.due_date <= local_today()):
+            task_summary(task, pet, state, entry.owner_name)
+        if entry.owner_id == viewer_id and not entry.projected and entry.status != "done" and (task.due_date is None or task.due_date <= local_today()):
             if action.button("Mark done", key=f"done_{prefix}_{task.task_id}", use_container_width=True):
                 try:
                     _, next_task = store.complete_task(task.task_id)
@@ -222,17 +225,22 @@ def task_card(store, owner, entry, prefix):
                 st.caption("Estimated repeat; its date can shift when the preceding task is completed.")
 
 
-def calendar_page(store, owner):
+def calendar_page(store, owner, owners):
     heading, actions = st.columns([3, 2], vertical_alignment="center")
-    heading.title("Care calendar")
+    heading.title("Community calendar")
     heading.caption(local_today().strftime("%A, %B %d") + " / " + owner.timezone)
-    chosen_pet = st.session_state.get("calendar_pet") or owner.pets[0].pet_id
+    chosen_pet = st.session_state.get("calendar_pet")
+    if chosen_pet is None or owner.find_pet(chosen_pet) is None:
+        chosen_pet = owner.pets[0].pet_id if owner.pets else None
     actions.button("Add task", type="primary", on_click=open_editor,
-                   args=(chosen_pet, st.session_state.get("calendar_date") or local_today(), "Conversation"))
-    calendar_workspace(store, owner)
+                   args=(chosen_pet, st.session_state.get("calendar_date") or local_today(), "Conversation"),
+                   disabled=not owner.pets, help="Add a pet first" if not owner.pets else None)
+    calendar_workspace(store, owner, owners)
 
 
-def calendar_workspace(store, owner):
+def calendar_workspace(store, owner, owners):
+    view_owner = copy(owner)
+    view_owner.pets = [pet for profile in owners for pet in profile.pets]
     selected = st.session_state.get("calendar_date") or local_today()
     if "selected_day" not in st.session_state:
         st.session_state.selected_day = selected
@@ -243,11 +251,17 @@ def calendar_workspace(store, owner):
             st.button("Next day", on_click=select_date, args=(selected + timedelta(days=1),))
             with st.container(key="view_switch", width=230):
                 view = st.radio("Calendar view", ["Week", "Agenda"], index=0, horizontal=True, label_visibility="collapsed", key="calendar_view")
-        date_col, pet_col, status_col = st.columns([1.5, 1.3, 1])
+        date_col, owner_col, pet_col, status_col = st.columns([1.5, 1.1, 1.1, 1])
+        owner_id = owner_col.selectbox("Owner", [None] + [p.owner_id for p in owners],
+                                      format_func=lambda value: "All owners" if value is None else next(p.name for p in owners if p.owner_id == value),
+                                      key="calendar_owner")
+        pets = [p for profile in owners if owner_id is None or profile.owner_id == owner_id for p in profile.pets]
+        if st.session_state.get("calendar_pet") not in [None] + [p.pet_id for p in pets]:
+            st.session_state.calendar_pet = None
         selected = date_col.date_input("Selected day", value=None if "selected_day" in st.session_state else selected, key="selected_day", on_change=remember_date)
-        pet_id = pet_col.selectbox("Pet", [None] + [p.pet_id for p in owner.pets],
-                                  format_func=lambda v: "All pets" if v is None else (
-                                      owner.get_pet(v).name + (f" (ID {v})" if sum(p.name == owner.get_pet(v).name for p in owner.pets) > 1 else "")),
+        pet_id = pet_col.selectbox("Pet", [None] + [p.pet_id for p in pets],
+                                  format_func=lambda value: "All pets" if value is None else (
+                                      view_owner.get_pet(value).name + " / " + next(p.name for p in owners if p.find_pet(value))),
                                   key="calendar_pet")
         status_label = status_col.selectbox("Status", ["All", "Pending", "Overdue", "Done"], key="calendar_status")
         status = None if status_label == "All" else status_label.lower()
@@ -263,9 +277,9 @@ def calendar_workspace(store, owner):
                     with col:
                         st.button(day.strftime("%a %d") + (" *" if day == selected else ""), key=f"day_{i}", on_click=select_date, args=(day,),
                                   use_container_width=True, type="primary" if day == selected else "secondary")
-                        entries = filter_entries(entries_for_day(owner, day), pet_id, status)
+                        entries = filter_entries(community_entries(owners, day, owner.timezone, owner_id), pet_id, status)
                         for entry in entries[:2]:
-                            pet = owner.get_pet(entry.task.assigned_pet_id)
+                            pet = view_owner.get_pet(entry.task.assigned_pet_id)
                             color = ["", "blue", "rust"][(pet.pet_id - 1) % 3]
                             calendar_chip(entry, pet, color)
                         if not entries:
@@ -273,28 +287,28 @@ def calendar_workspace(store, owner):
                         if len(entries) > 2:
                             st.caption(f"+{len(entries)-2} more in agenda")
         st.subheader(selected.strftime("%A, %B %d") + " agenda")
-        if selected == local_today() and owner.get_all_tasks():
-            with st.expander("Today's care summary"):
-                due = [t for t in Scheduler.get_daily_tasks(owner, include_completed=True)
-                       if pet_id is None or t.assigned_pet_id == pet_id]
-                pending = sum(t.status == "pending" for t in due)
-                overdue = sum(t.status == "overdue" for t in due)
-                done = sum(t.last_completed_date == local_today() for t in owner.get_all_tasks()
-                           if pet_id is None or t.assigned_pet_id == pet_id)
-                counts = [f"{count} {label}" for count, label in ((pending,"pending"),(overdue,"overdue"),(done,"done")) if count]
-                st.write(" / ".join(counts) if counts else "No tasks due today.")
+        if selected == local_today():
+            due = filter_entries(community_entries(owners, selected, owner.timezone, owner_id)
+                                 + community_overdue(owners, owner.timezone, owner_id), pet_id)
+            due = list({(e.task.task_id, e.status): e for e in due}.values())
+            if due:
+                with st.expander("Today's care summary"):
+                    counts = [f"{sum(e.status == state for e in due)} {state}" for state in ("pending", "overdue", "done")
+                              if any(e.status == state for e in due)]
+                    st.write(" / ".join(counts))
         for warning in day_conflicts(owner, selected):
             st.warning(warning)
         if selected == local_today():
-            overdue = [t for t in owner.get_all_tasks() if t.status == "overdue"]
-            overdue_entries = filter_entries([CalendarEntry(t, t.due_date) for t in Scheduler.sort_by_time(overdue)], pet_id, status)
+            overdue_entries = filter_entries(community_overdue(owners, owner.timezone, owner_id), pet_id, status)
             if overdue_entries:
-                st.caption("Overdue / original due dates retained")
+                st.caption("Overdue")
                 for entry in overdue_entries:
-                    task_card(store, owner, entry, "overdue")
-        entries = filter_entries(entries_for_day(owner, selected), pet_id, status)
+                    task_card(store, view_owner, entry, "overdue", owner.owner_id)
+        entries = filter_entries(community_entries(owners, selected, owner.timezone, owner_id), pet_id, status)
+        if selected == local_today():
+            entries = [e for e in entries if e.status != "overdue"]
         for entry in entries:
-            task_card(store, owner, entry, "agenda")
+            task_card(store, view_owner, entry, "agenda", owner.owner_id)
         if not entries:
             st.caption("No tasks match this day and these filters.")
         if view == "Week" and owner.pets:
@@ -315,7 +329,7 @@ def main():
             st.session_state.page = "User"
         elif st.session_state.get("page") not in ("User", "Pets", "Calendar"):
             st.session_state.page = "Pets"
-        elif st.session_state.page == "Calendar" and not owner.pets:
+        elif st.session_state.page == "Calendar" and not any(p.pet_count for p in profiles):
             st.session_state.page = "Pets"
     except (sqlite3.Error, OSError):
         st.error("Local storage is unavailable. Check folder permissions or PAWPAL_DB_PATH, then reload.")
@@ -332,7 +346,7 @@ def main():
         if page == "Pets":
             pets_page(store, owner)
         else:
-            calendar_page(store, owner)
+            calendar_page(store, owner, root_store.load_community())
         if st.session_state.get("pet_dialog_open") and page == "Pets":
             pet_dialog(store)
         elif st.session_state.get("editor_open") and owner.pets and page == "Calendar":

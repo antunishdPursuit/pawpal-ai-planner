@@ -170,6 +170,13 @@ class PlannerStore:
             conn.execute("BEGIN")
             return self._load(conn)
 
+    def load_community(self) -> list[Owner]:
+        """Read every local profile in one snapshot; writes remain owner-scoped."""
+        with self.connection() as conn:
+            conn.execute("BEGIN")
+            ids = [row[0] for row in conn.execute("SELECT owner_id FROM owner ORDER BY owner_id")]
+            return [self._load(conn, owner_id) for owner_id in ids]
+
     def _save(self, conn, owner: Owner):
         # Replace only this owner's aggregate atomically, under a write lock.
         # Other local users and concurrent readers retain their complete state.

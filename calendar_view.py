@@ -1,8 +1,9 @@
 """Read-only calendar projections; viewing a date never creates tasks."""
-from dataclasses import dataclass
-from datetime import date
+from dataclasses import dataclass, replace
+from datetime import date, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 from pawpal_system import Owner, Task, ScheduleType, Scheduler
-from planner_clock import local_today
+from planner_clock import local_today, using_timezone
 
 
 @dataclass(frozen=True)
@@ -11,9 +12,15 @@ class CalendarEntry:
     day: date
     projected: bool = False
     completion: bool = False
+    owner_id: int | None = None
+    owner_name: str = ""
+    display_time: time | None = None
+    source_status: str | None = None
 
     @property
     def status(self):
+        if self.source_status is not None:
+            return self.source_status
         if self.completion:
             return "done"
         if self.projected or (
@@ -69,3 +76,46 @@ def draft_conflicts(owner, draft):
     candidate = Task(draft.title or "New task", "", draft.pet_id, task_id=0,
                      time_of_day=draft.time_of_day)
     return Scheduler.detect_conflicts(matching + [candidate], owner.pets)
+
+
+def community_entries(owners, day, timezone, owner_id=None):
+    """Project timed occurrences into the viewer's zone; Anytime stays a care date."""
+    zone = ZoneInfo(timezone)
+    start = datetime.combine(day, time.min, zone)
+    end = datetime.combine(day + timedelta(days=1), time.min, zone) - timedelta(microseconds=1)
+    result = []
+    for owner in owners:
+        if owner_id is not None and owner.owner_id != owner_id:
+            continue
+        source_zone = ZoneInfo(owner.timezone)
+        first, last = start.astimezone(source_zone).date(), end.astimezone(source_zone).date()
+        dates = {day, first, last}
+        with using_timezone(owner.timezone):
+            for source_day in sorted(dates):
+                for entry in entries_for_day(owner, source_day):
+                    at = entry.task.time_of_day
+                    displayed = datetime.combine(source_day, at, source_zone).astimezone(zone) if at else None
+                    shown_day = displayed.date() if displayed else source_day
+                    if shown_day == day:
+                        result.append(replace(entry, day=day, owner_id=owner.owner_id,
+                                              owner_name=owner.name,
+                                              display_time=displayed.time() if displayed else None,
+                                              source_status=entry.status))
+    return sorted(result, key=lambda e: (e.display_time is None, e.display_time or time.max, e.task.task_id))
+
+
+def community_overdue(owners, timezone, owner_id=None):
+    result = []
+    for owner in owners:
+        if owner_id is not None and owner.owner_id != owner_id:
+            continue
+        with using_timezone(owner.timezone):
+            for task in owner.get_all_tasks():
+                if task.status != "overdue":
+                    continue
+                at = task.time_of_day
+                shown = datetime.combine(task.due_date, at, ZoneInfo(owner.timezone)).astimezone(ZoneInfo(timezone)) if at else None
+                result.append(CalendarEntry(task, shown.date() if shown else task.due_date,
+                                            owner_id=owner.owner_id, owner_name=owner.name,
+                                            display_time=shown.time() if shown else None, source_status="overdue"))
+    return sorted(result, key=lambda e: (e.day, e.display_time is None, e.display_time or time.max, e.task.task_id))
