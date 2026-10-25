@@ -121,11 +121,12 @@ def user_page(store, owner, profiles):
                     st.rerun()
         with st.expander("Add a new local user", expanded=not profiles):
             profile_form(store)
-    with st.expander("Local saving and Gemini"):
-        st.caption("Data is saved on this computer, without cloud sync. Local users are not password-protected.")
-        st.text(str(store.path))
-        st.write("Gemini configured" if is_configured() else "Gemini not configured")
-        st.text("Model: " + configuration()[1])
+    with st.container(key="profile_details"):
+        with st.expander("Local saving and Gemini"):
+            st.caption("Data is saved on this computer, without cloud sync. Local users are not password-protected.")
+            st.text(str(store.path))
+            st.write("Gemini configured" if is_configured() else "Gemini not configured")
+            st.text("Model: " + configuration()[1])
 
 
 def pet_form(store):
@@ -168,15 +169,16 @@ def sidebar(owner, profiles):
 
 
 def pets_page(store, owner):
-    title, action = st.columns([3, 1], vertical_alignment="center")
-    title.title("Your pets")
+    with st.container(horizontal=True, vertical_alignment="center", key="pets_heading"):
+        st.title("Your pets", width="content")
+        if owner.pets:
+            st.button("Add a pet", key="add_pet", on_click=show_pet_dialog, type="primary")
     if not owner.pets:
         with st.container(key="pets_surface"):
             st.subheader("Meet your first pet")
             st.write("Start with their name, species and age.")
             pet_form(store)
     else:
-        action.button("Add a pet", on_click=show_pet_dialog, type="primary", use_container_width=True)
         columns = st.columns(min(3, len(owner.pets)))
         for i, pet in enumerate(owner.pets):
             with columns[i % len(columns)]:
