@@ -9,7 +9,7 @@ from calendar_view import entries_for_day, filter_entries, day_conflicts
 from pawpal_system import Scheduler
 from planner_clock import local_today, using_timezone
 from planner_storage import PlannerStore
-from task_contract import TaskDraft
+from task_editor import show_editor, open_editor, map_search_url
 
 st.set_page_config(page_title="PawPal AI Planner", page_icon=favicon(), layout="wide")
 apply_theme()
@@ -20,7 +20,7 @@ def navigate(page):
 
 
 def move_date(days):
-    st.session_state.selected_day = st.session_state.get("selected_day", local_today()) + timedelta(days=days)
+    st.session_state.selected_day = (st.session_state.get("selected_day") or local_today()) + timedelta(days=days)
 
 
 def today_date():
@@ -69,30 +69,6 @@ def pets_page(store, owner):
                 st.rerun()
 
 
-def basic_manual_form(store, owner):
-    if not owner.pets:
-        return
-    with st.expander("Add a care task"):
-        with st.form("manual_task"):
-            pet_id = st.selectbox("Assign to pet", [p.pet_id for p in owner.pets],
-                                  format_func=lambda value: owner.get_pet(value).name)
-            title = st.text_input("Task title", max_chars=120)
-            description = st.text_area("Description", max_chars=1000)
-            due = st.date_input("Date", value=local_today())
-            at = st.time_input("Time of day (optional)", value=None)
-            repeat = st.selectbox("Repeat", ["NONE", "DAILY", "WEEKLY", "CUSTOM"])
-            interval = st.number_input("Custom interval (days)", min_value=1, max_value=365, value=3)
-            submit = st.form_submit_button("Confirm and save", type="primary")
-        if submit:
-            try:
-                store.create_task(TaskDraft(pet_id, title, due, at, repeat, int(interval), description))
-            except (ValueError, sqlite3.Error, OSError) as error:
-                st.error(str(error) if isinstance(error, ValueError) else "Could not save this task. Your entries are still here.")
-            else:
-                st.session_state.notice = "Task saved."
-                st.rerun()
-
-
 def task_card(store, owner, entry, prefix):
     task = entry.task
     pet = owner.get_pet(task.assigned_pet_id)
@@ -101,6 +77,9 @@ def task_card(store, owner, entry, prefix):
         at = task.time_of_day.strftime("%I:%M %p").lstrip("0") if task.time_of_day else "Anytime"
         state = "Planned repeat" if entry.projected else entry.status.capitalize()
         st.caption(f"{pet.name} \u00b7 {at} \u00b7 {state}")
+        if task.location_text:
+            st.text(task.location_text)
+            st.link_button("Open in Maps", map_search_url(task.location_text))
         if task.description:
             st.text(task.description)
         if task.due_date:
@@ -129,7 +108,19 @@ def calendar_page(store, owner):
         st.info("Add a pet before creating care tasks.")
         st.button("Add your first pet", on_click=navigate, args=("Pets",), type="primary")
         return
-    basic_manual_form(store, owner)
+    st.button("Add task manually", on_click=open_editor,
+              args=(owner.pets[0].pet_id, st.session_state.get("selected_day", local_today())))
+    if st.session_state.get("editor_open"):
+        calendar_col, editor_col = st.columns([7, 3], gap="large")
+        with calendar_col:
+            calendar_workspace(store, owner)
+        with editor_col:
+            show_editor(store, owner)
+    else:
+        calendar_workspace(store, owner)
+
+
+def calendar_workspace(store, owner):
     selected = st.session_state.get("selected_day", local_today())
     view = st.segmented_control("Calendar view", ["Week", "Agenda"], default="Week")
     step = 7 if view == "Week" else 1
@@ -137,7 +128,10 @@ def calendar_page(store, owner):
     controls[0].button("Today", on_click=today_date, use_container_width=True)
     controls[1].button("Previous", on_click=move_date, args=(-step,), use_container_width=True)
     controls[2].button("Next", on_click=move_date, args=(step,), use_container_width=True)
-    selected = controls[3].date_input("Selected day", value=selected, key="selected_day")
+    selected = controls[3].date_input("Selected day", value=None if "selected_day" in st.session_state else selected, key="selected_day")
+    if selected is None:
+        st.info("Choose a date to see the agenda.")
+        return
     filters = st.columns(2)
     pet_id = filters[0].selectbox("Pet", [None] + [p.pet_id for p in owner.pets],
                                 format_func=lambda value: "All pets" if value is None else owner.get_pet(value).name)
@@ -197,6 +191,8 @@ def main():
         profile_form(store)
         return
     with using_timezone(owner.timezone):
+        if "pending_selected_day" in st.session_state:
+            st.session_state.selected_day = st.session_state.pop("pending_selected_day")
         if "notice" in st.session_state:
             st.success(st.session_state.pop("notice"))
         page = st.segmented_control("Navigation", ["Calendar", "Pets", "Settings"], default=None if "page" in st.session_state else "Calendar", key="page", label_visibility="collapsed")

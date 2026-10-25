@@ -171,7 +171,7 @@ class PlannerStore:
             self._save(conn, owner)
             return self._load(conn).get_pet(pet.pet_id)
 
-    def create_task(self, draft: TaskDraft) -> Task:
+    def create_task(self, draft: TaskDraft, allow_conflicts: bool = False) -> Task:
         with self.transaction() as conn:
             owner = self._load(conn)
             if owner is None:
@@ -180,6 +180,10 @@ class PlannerStore:
             if existing:
                 return existing
             draft = draft.validate(owner)
+            from calendar_view import draft_conflicts
+            with using_timezone(owner.timezone):
+                if draft_conflicts(owner, draft) and not allow_conflicts:
+                    raise ValueError("This time conflicts with another task. Review the warning and choose whether to keep it.")
             schedule = None if draft.repeat == "NONE" else Schedule(
                 ScheduleType[draft.repeat], draft.due_date, draft.interval_days,
             )

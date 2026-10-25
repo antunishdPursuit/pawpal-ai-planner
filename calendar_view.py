@@ -14,7 +14,14 @@ class CalendarEntry:
 
     @property
     def status(self):
-        return "pending" if self.projected else "done" if self.completion else self.task.status
+        if self.completion:
+            return "done"
+        if self.projected or (
+            self.task.schedule and self.task.schedule.schedule_type == ScheduleType.CUSTOM
+            and self.day > local_today()
+        ):
+            return "pending"
+        return self.task.status
 
 
 def entries_for_day(owner: Owner, day: date) -> list[CalendarEntry]:
@@ -48,3 +55,17 @@ def day_conflicts(owner: Owner, day: date, candidate=None) -> list[str]:
     if candidate is not None:
         tasks.append(candidate)
     return Scheduler.detect_conflicts(tasks, owner.pets)
+
+
+
+def draft_conflicts(owner, draft):
+    """Only conflicts involving this proposed time, on this proposed date."""
+    if draft.time_of_day is None or draft.due_date is None:
+        return []
+    matching = [e.task for e in entries_for_day(owner, draft.due_date)
+                if e.status != "done" and e.task.time_of_day == draft.time_of_day]
+    if not matching:
+        return []
+    candidate = Task(draft.title or "New task", "", draft.pet_id, task_id=0,
+                     time_of_day=draft.time_of_day)
+    return Scheduler.detect_conflicts(matching + [candidate], owner.pets)
