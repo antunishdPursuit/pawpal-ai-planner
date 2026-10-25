@@ -180,6 +180,10 @@ Voice completion was then checked with real synthetic speech: PawPal repeated th
 - No cloud sync, reminders, route planning, veterinary advice, duration-aware optimization or guided tour. Pet/task deletion and editing existing tasks are not new UI features in this version.
 - The original CLI and domain methods remain. The historical `reflection.md` belongs to the base project; this extension's responsible-AI record is `model_card.md`.
 
+## Project reflection
+
+This project reflects how I approach AI engineering: start with the owner's task, keep model suggestions reviewable, and verify what the application saves. I revised the calendar-first design to introduce users and pets before scheduling. That review connected the interface to the full request-to-confirmation-to-saved-task workflow. A plausible AI response is only one part of a useful application; clear navigation, validation and verified persistence matter too. See [model_card.md](model_card.md#collaboration-with-ai) for the accepted and revised AI suggestions, limitations and testing observations.
+
 ## Sources
 
 [AI110 Applied AI System instructions](https://courses.codepath.org/courses/ai110/unit/8#!projects), [Google Gen AI Python SDK](https://googleapis.github.io/python-genai/), [Gemini structured output](https://ai.google.dev/gemini-api/docs/generate-content/structured-output), [Gemini 3.8 Flash](https://ai.google.dev/gemini-api/docs/models/gemini-3.8-flash), [Streamlit configuration](https://docs.streamlit.io/develop/api-reference/configuration/config.toml), [Gemini Live](https://ai.google.dev/gemini-api/docs/live-api), [Live ephemeral tokens](https://ai.google.dev/gemini-api/docs/live-api/ephemeral-tokens), [Streamlit components v2](https://docs.streamlit.io/develop/concepts/custom-components/components-v2).

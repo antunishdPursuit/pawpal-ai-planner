@@ -55,11 +55,19 @@ Review also found that a follow-up clarification could leave an earlier preview 
 
 ## Collaboration with AI
 
-Accepted design: a separate repository, a four-table local data model, User/Pets/Calendar navigation with pet-first onboarding, and an editable confirmation between Gemini and storage. This preserves the original coursework and makes the write decision visible to the owner.
+### Accepted suggestion: separate proposals from saving
 
-Revised scope: the guided tour remains deferred. Voice was later approved and implemented as described below. This version concentrates on typed planning, calendar use, confirmed location links and local persistence. Additional saved tests were excluded at Dennis's direction; the original six were retained and new behavior was checked without new test files.
+I accepted the AI's proposed separation between Gemini task proposals, local validation, and storage. A proposal becomes a saved task only after the owner reviews and confirms the details. This lets the owner check the pet, date, time and location, while application code validates the data before writing. The separate repository and four-table data model also preserve the original PawPal+ project.
 
-The AI helped inspect the base project, propose the data flow, implement increments and exercise synthetic cases. Dennis selected Gemini and approved the layout, preservation boundaries and commit workflow. The observed implementation and evaluation above document this collaboration; they do not invent an earlier personal experience or claim that Dennis has already tested the finished app.
+### Revised suggestion: put pets before the calendar
+
+The AI's initial layout opened on the calendar. I changed the flow to User -> Pets -> Calendar because an owner needs to choose a user and register a pet before creating that pet's care tasks. Starting with an empty calendar did not make that first step clear. Pet registration now belongs on Pets, and scheduling belongs on Calendar. I also asked to remove duplicate navigation and combine task creation into one Add task entry. These changes give each screen a clear purpose.
+
+### Scope and collaboration
+
+The guided tour remains deferred. Voice was later approved and implemented as described below. Additional saved tests were excluded at my direction; the original six were retained and new behavior was checked without new test files.
+
+The AI helped inspect the base project, propose the data flow, implement increments and exercise synthetic cases. I selected Gemini, reviewed the running interface, requested the pet-first flow, and tested microphone input and spoken task confirmation. The evaluation sections distinguish my device checks from synthetic provider inputs and disposable-data verification.
 
 ## User and pet first follow-up
 
