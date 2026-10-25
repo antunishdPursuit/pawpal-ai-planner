@@ -1,5 +1,5 @@
 flowchart TD
-    User[Pet owner] --> UI[Streamlit: Calendar / Pets / Settings]
+    User[Pet owner] --> UI[Streamlit: User / Pets / Calendar]
     UI --> Manual[Manual task entry]
     UI --> Conversation[Typed conversation]
     Store[(Local SQLite)] --> Context[Relevant pets and tasks]
@@ -11,7 +11,7 @@ flowchart TD
     Clarify --> Conversation
     Validator --> Preview[Editable task preview]
     Preview --> Confirm{Owner confirms?}
-    Confirm -->|cancel| UI
+    Confirm -->|keep draft| UI
     Confirm -->|yes| Service[Validate again and save once]
     Service --> Domain[Owner / Pet / Task / Scheduler]
     Domain --> Store

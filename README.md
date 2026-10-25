@@ -17,7 +17,7 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 python -m streamlit run app.py --server.address 127.0.0.1
 ```
 
-Open the localhost URL printed by Streamlit. Create your local profile, choose your timezone, and add your pets. No sample tasks are automatically created.
+Open the localhost URL printed by Streamlit. Choose or create a local user, then add a pet on **Pets**. Saving a pet opens **Calendar**. No sample users, pets, or tasks are automatically created.
 
 The default model is `gemini-3.8-flash`. Set `GEMINI_MODEL` in .env to override it with a compatible model your API project can use. Manual entry works without a key or network access. Restarting the app retains saved profiles, pets, tasks, schedules, and completion dates; unsaved drafts and conversation history are temporary.
 
@@ -25,13 +25,13 @@ Dependencies are pinned to the versions verified in this build. Credentials and 
 
 ## Use the planner
 
-- **Calendar:** framed week cells or a daily agenda, Previous day/Today/Next day, selected date, pet/status filters, and a compact daily care summary. Desktop uses a navigation rail; phones have direct Calendar/Pets/Settings tabs.
-- **Plan with PawPal:** type one care task at a time. Gemini uses registered pet IDs, the local date/timezone, and a bounded snapshot of unfinished tasks. Missing or ambiguous information prompts clarification.
-- **Review your task:** a focused dialog with editable pet, title, date, time/Anytime, repeat, description, and location. Select **Confirm and save**. Cancel discards the draft without writing; Escape closes the dialog and preserves it.
-- **Add task manually:** the same editable confirmation and validation without Gemini.
-- **Task details:** Mark done when due; open a map search for a confirmed location. A conflict requires an explicit choice to keep the time.
-- **Pets:** register and inspect pets. IDs distinguish pets with the same name.
-- **Settings:** rename the owner without losing data, choose timezone, and inspect local-saving/Gemini configuration.
+- **User:** the only enabled destination before choosing a local user. Select an existing user or create a name/timezone profile. The clickable current-user control in the sidebar opens this page to change users or update timezone. Names are displayed as identity, not an owner-renaming form. Switching users clears the previous user's temporary draft and conversation after a visible warning.
+- **Pets:** the first screen after selecting a user. Register pets here; the calendar stays unavailable until a pet exists. Saving a pet opens Calendar. Pet registration is not repeated on Calendar.
+- **Calendar:** large week cells or a daily agenda, Previous day/Today/Next day, selected date and pet/status filters. The week grid scrolls horizontally on smaller screens; the page scrolls vertically to the agenda. Care counts are secondary, inside a disclosure, without an all-zero strip. Navigation lives only in the collapsible sidebar at every width.
+- **Plan with PawPal:** type one care task at a time. Gemini uses the selected user's pets, local date/timezone, and a bounded snapshot of unfinished tasks. Missing or ambiguous information prompts clarification. Replacing an existing draft requires explicit consent.
+- **Review your task:** edit pet, title, date, time/Anytime, repeat, description and location, then select **Confirm and save**. **Keep draft** closes without a write and retains temporary edits. **Start over** discards the draft and conversation while retaining the chosen calendar context. Implicit Escape/outside-click dismissal is disabled because it could lose a focused field's uncommitted edit.
+- **Add task manually:** the same editable confirmation and validation without Gemini. The selected calendar date and pet supply the defaults.
+- **Task details:** mark done when due; open a map search for a confirmed location. A conflict requires an explicit choice to keep the time.
 
 Daily and weekly completion retains the completed occurrence and creates one next occurrence from the completion date. Custom routines update the same task and retain their latest completion date. Repeating tasks are not advanced by viewing the calendar. Planned future repeats are estimates; completing late can shift them.
 
@@ -46,9 +46,9 @@ Overdue items keep their actual due date. Untimed tasks appear as Anytime. Calen
 
 `gemini_planner.py` proposes a structured task. `task_contract.py` validates it against registered pets and supported fields. `task_editor.py` requires an editable human confirmation. `planner_storage.py` rechecks against current saved data under a transaction, delegates recurrence to the original domain model, and reads the result back. `calendar_view.py` computes views and estimated recurrences without writes.
 
-SQLite stores Owner, Pet, Task, and optional Schedule. Status is derived from date/completion rather than stored as a stale flag. Creation request IDs make repeated confirmation idempotent. Loading reserves existing IDs so new records cannot overwrite them.
+SQLite stores Owner, Pet, Task, and optional Schedule. Status is derived from date/completion rather than stored as a stale flag. Creation request IDs make repeated confirmation idempotent. Loading reserves IDs across all profiles so a new record cannot reuse another user's ID; saving replaces only the selected owner's aggregate under a transaction.
 
-Windows default database: `%LOCALAPPDATA%\PawPalAIPlanner\pawpal.sqlite3`. Other systems use `~/.local/share/PawPalAIPlanner/pawpal.sqlite3`. For a separate local database, set `PAWPAL_DB_PATH` before starting the app. This is a small single-profile local application, not a hosted multi-user service.
+Windows default database: `%LOCALAPPDATA%\PawPalAIPlanner\pawpal.sqlite3`. Other systems use `~/.local/share/PawPalAIPlanner/pawpal.sqlite3`. For a separate local database, set `PAWPAL_DB_PATH` before starting the app. Multiple local users share this database, with owner-scoped pets, tasks and schedules. This is a local profile switcher, not authentication: anyone using this app on the device can select another local user. It is not a hosted multi-user service.
 
 ## Actual interaction evidence
 
@@ -129,11 +129,15 @@ New behavior was checked with disposable databases, in-memory Streamlit app runs
 | Desktop browser layout and labels | Inspected with temporary sample data |
 | 320, 390, 768 and 1280 CSS-pixel widths | Passed; document width matched viewport and main content had no horizontal overflow |
 | 200% zoom-equivalent reflow | Passed at 720x500 CSS pixels with 2x pixel density (1440x1000 physical equivalent); agenda and dialog actions fit |
-| Keyboard primary workflows | Tab/Shift+Tab, visible focus, modal focus containment, Escape/draft preservation/focus return, Space/arrow selection, Enter save and completion passed |
-| Mobile navigation and calendar state | Calendar/Pets/Settings activated by keyboard; selected date retained across page changes |
+| Keyboard primary workflows | Tab/Shift+Tab, visible focus, modal containment, explicit Keep draft, Space/arrow selection and Enter confirmation checked; completion was checked in the earlier build |
+| Sidebar navigation and calendar state | User/Pets/Calendar, disabled first-use destinations, keyboard collapse/reopen, and selected-date navigation checked |
 | Reduced-motion preference | Emulated preference matched; computed transitions were 0s |
 
-An October 25 UX review replaced the sparse default layout with a framed calendar, compact summary, pet-colored task previews, desktop navigation rail, mobile tabs and focused task dialogs. Browser checks found and corrected an off-screen dialog footer. A live Gemini request at 320px produced a valid October 26, 11:00 Central Park preview; the isolated database remained at eight tasks until an edited-title keyboard confirmation saved the ninth. Separate keyboard completion created the expected next daily occurrence.
+The October 25 screenshot follow-up corrected stale styling in the normal running app, removed duplicate navigation, and established User -> Pets -> Calendar. Browser checks covered 320/390/768/1024/1280px widths, sidebar collapse/reopen, scrollable week cells and agenda, invalid-user form retention, user switching and isolated data. Temporary application runs checked three-profile storage, ID restoration, transactional rollback, recurrence, draft/request retention across modes, reset context and cross-user draft cleanup. The six original tests remain unchanged.
+
+A live Gemini request in Pacific/Kiritimati (already October 26 while the machine was October 25) proposed `Feed Pip tomorrow at 8 AM at home.` for October 27. The temporary database stayed at one task until explicit keyboard confirmation saved the edited title `Feed Pip morning meal`, with the expected pet/date/time/location. The normal database's owner/pet/task/schedule records matched its pre-change backup exactly.
+
+At 320px, confirmation labels initially truncated; the actions now stack and fit. Escape was found to discard a focused field's latest edit, so task dialogs now close through explicit Keep draft or confirmation. Keep/reopen retained both edited fields and an unsent conversation request. These current behaviors supersede the earlier mobile-tab and Escape-dismissal design.
 
 Zoom was checked with Chromium device metrics: a half-size CSS viewport and doubled pixel density. This verifies 200% reflow behavior; it is not a claim that a native browser zoom shortcut was exercised. Keyboard checks cover the primary app workflows, not a full assistive-technology or WCAG conformance audit.
 

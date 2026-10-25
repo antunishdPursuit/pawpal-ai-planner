@@ -16,7 +16,7 @@ The model receives the request, up to six recent conversation messages, up to 50
 - Conflict warnings concern exact start times. They do not calculate duration overlap, travel, park hours, weather or availability.
 - Planned repeats are estimates based on the current due date (or today for overdue work). Actual future dates can shift after late completion.
 - Daily/weekly completed occurrences remain in history. Custom routines retain their latest completion rather than a separate full event log.
-- Local data is not cloud-synced. There is no multi-user authentication or hosted-service security boundary.
+- Local data is not cloud-synced. Local users have separate records but no authentication: anyone on the device can choose any profile. This is not a hosted-service security boundary.
 - Layout and primary keyboard workflows were checked at narrow widths and 200% zoom-equivalent reflow. A complete screen-reader/assistive-technology and WCAG conformance audit has not been performed.
 
 ## Misuse and guardrails
@@ -55,8 +55,16 @@ Review also found that a follow-up clarification could leave an earlier preview 
 
 ## Collaboration with AI
 
-Accepted design: a separate repository, a four-table local data model, Calendar/Pets/Settings navigation, and an editable confirmation between Gemini and storage. This preserves the original coursework and makes the write decision visible to the owner.
+Accepted design: a separate repository, a four-table local data model, User/Pets/Calendar navigation with pet-first onboarding, and an editable confirmation between Gemini and storage. This preserves the original coursework and makes the write decision visible to the owner.
 
 Revised scope: the earlier voice and guided-tour ideas were deferred. This version concentrates on typed planning, calendar use, confirmed location links and local persistence. Additional saved tests were excluded at Dennis's direction; the original six were retained and new behavior was checked without new test files.
 
 The AI helped inspect the base project, propose the data flow, implement increments and exercise synthetic cases. Dennis selected Gemini and approved the layout, preservation boundaries and commit workflow. The observed implementation and evaluation above document this collaboration; they do not invent an earlier personal experience or claim that Dennis has already tested the finished app.
+
+## User and pet first follow-up
+
+October 25: the normal app's stale stylesheet was corrected and its scrolling/navigation rechecked. Current flow is User -> Pets -> Calendar, with pet registration only on Pets. Profiles scope both saved data and Gemini context; changing users clears temporary drafts/conversation after a warning. Names identify local users; timezone can be updated independently.
+
+A next-day timezone browser check and live Gemini request used Pacific/Kiritimati. `Feed Pip tomorrow at 8 AM at home.` correctly proposed October 27 from local October 26. No task was saved before confirmation; the edited title, pet, date, time and location matched readback afterward. Fixtures remained separate from real user data. The normal database matched its pre-change records.
+
+Browser follow-up covered five widths from 320 to 1280px, horizontal week scrolling without page overflow, sidebar recovery, keyboard controls, and the same 200% zoom-equivalent method described above. Source review prompted corrections to draft replacement consent, date callbacks, mode selection, and input retention. Focused-field loss on Escape was reproduced; implicit dismissal is disabled. Keep draft retains edits/request text, and Start over retains the selected calendar context while clearing the draft. Six original tests remain unchanged and pass; no new test files were added. This supersedes the earlier Escape-dismissal and mobile-tab descriptions, without claiming a full accessibility audit.
