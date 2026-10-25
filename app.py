@@ -1,202 +1,215 @@
+"""PawPal AI Planner's local Streamlit interface."""
+from datetime import date, timedelta
+import sqlite3
+from zoneinfo import available_timezones
+
 import streamlit as st
-from datetime import date, time
-from pawpal_system import Owner, Pet, Task, Schedule, ScheduleType, Scheduler
+from app_theme import apply_theme, favicon
+from calendar_view import entries_for_day, filter_entries, day_conflicts
+from pawpal_system import Scheduler
+from planner_clock import local_today, using_timezone
+from planner_storage import PlannerStore
+from task_contract import TaskDraft
 
-st.set_page_config(page_title="PawPal+", page_icon="🐾", layout="wide")
+st.set_page_config(page_title="PawPal AI Planner", page_icon=favicon(), layout="wide")
+apply_theme()
 
-st.title("🐾 PawPal+")
 
-# --- Persist Owner across reruns ---
-if "owner" not in st.session_state:
-    st.session_state.owner = None
+def navigate(page):
+    st.session_state.page = page
 
-# ── Owner Setup (above columns — needed before anything else renders) ───────
-st.subheader("Owner")
-owner_name = st.text_input("Your name", value="Jordan")
 
-if st.button("Set Owner"):
-    if not owner_name.strip():
-        st.error("Enter an owner name.")
-    else:
-        if st.session_state.owner is None:
-            st.session_state.owner = Owner(owner_name.strip())
-        else:
-            st.session_state.owner.name = owner_name.strip()
-        st.success(f"Owner set: {owner_name.strip()}")
+def move_date(days):
+    st.session_state.selected_day = st.session_state.get("selected_day", local_today()) + timedelta(days=days)
 
-if st.session_state.owner is None:
-    st.info("Set an owner above to get started.")
-    st.stop()
 
-owner = st.session_state.owner
+def today_date():
+    st.session_state.selected_day = local_today()
 
-st.divider()
 
-# ── Two-column root layout ───────────────────────────────────────────────────
-col_forms, col_schedule = st.columns([1, 1.5])
-
-# ══════════════════════════════════════════════════════════════════════════════
-# LEFT — Pet & Task forms
-# ══════════════════════════════════════════════════════════════════════════════
-with col_forms:
-
-    # ── Section 2: Add a Pet ─────────────────────────────────────────────────
-    st.subheader("Add a Pet")
-
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        pet_name = st.text_input("Pet name", value="Mochi")
-    with c2:
-        species = st.selectbox("Species", ["dog", "cat", "other"])
-    with c3:
-        age = st.number_input("Age", min_value=0, max_value=30, value=2)
-
-    if st.button("Add Pet"):
-        new_pet = Pet(name=pet_name, species=species, age=age)
+def profile_form(store, owner=None):
+    with st.form("profile_form"):
+        name = st.text_input("Your name", value=owner.name if owner else "", max_chars=80)
+        zones = sorted(available_timezones())
+        current = owner.timezone if owner else "America/New_York"
+        zone = st.selectbox("Timezone", zones, index=zones.index(current))
+        submitted = st.form_submit_button("Save profile", type="primary")
+    if submitted:
         try:
-            if not pet_name.strip():
-                raise ValueError("Enter a pet name.")
-            new_pet.name = pet_name.strip()
-            owner.add_pet(new_pet)
-            st.success(f"Added {pet_name} the {species}!")
-        except ValueError as e:
-            st.error(str(e))
+            store.save_profile(name, zone)
+        except (ValueError, sqlite3.Error, OSError) as error:
+            st.error(str(error) if isinstance(error, ValueError) else "Could not save your profile. Check local storage permissions and try again.")
+        else:
+            st.session_state.notice = "Profile saved."
+            st.rerun()
 
-    if owner.pets:
-        st.markdown("**Registered pets:**")
-        for p in owner.pets:
-            st.write(f"- [{p.pet_id}] {p.name} ({p.species}, age {p.age})")
-    else:
-        st.info("No pets yet. Add one above.")
 
-    # ── Section 3: Add a Task ────────────────────────────────────────────────
-    st.divider()
-    st.subheader("Add a Task")
-
+def pets_page(store, owner):
+    st.header("Your pets")
     if not owner.pets:
-        st.info("Add a pet first before adding tasks.")
-    else:
-        pet_options = {f"{p.name} (ID {p.pet_id})": p for p in owner.pets}
-        selected_label = st.selectbox("Assign to pet", list(pet_options.keys()))
-        selected_pet = pet_options[selected_label]
-
-        c1, c2 = st.columns(2)
-        with c1:
-            task_title = st.text_input("Task title", value="Morning walk")
-            task_desc = st.text_input("Description", value="20 min walk")
-            task_time = st.time_input("Time of day (optional)", value=None)
-        with c2:
-            schedule_type = st.selectbox("Schedule", ["DAILY", "WEEKLY", "CUSTOM"])
-            interval = st.number_input("Interval (days, CUSTOM only)", min_value=1, max_value=365, value=3)
-
-        if st.button("Add Task"):
-            stype = ScheduleType[schedule_type]
-            schedule = Schedule(stype, start_date=date.today(), interval=interval)
-            time_of_day = time(task_time.hour, task_time.minute) if task_time else None
-            new_task = Task(
-                title=task_title,
-                description=task_desc,
-                assigned_pet_id=selected_pet.pet_id,
-                schedule=schedule,
-                time_of_day=time_of_day,
-            )
+        st.info("Add your first pet to start planning care.")
+    for pet in owner.pets:
+        with st.container(border=True):
+            st.text(pet.name)
+            st.caption(f"{pet.species} \u00b7 Age {pet.age} \u00b7 ID {pet.pet_id}")
+            st.caption(f"{len(pet.tasks)} saved task occurrences")
+    with st.expander("Add a pet", expanded=not owner.pets):
+        with st.form("pet_form", clear_on_submit=True):
+            name = st.text_input("Pet name", max_chars=80)
+            species = st.selectbox("Species", ["dog", "cat", "other"])
+            age = st.number_input("Age", min_value=0, max_value=30, value=2, step=1)
+            submit = st.form_submit_button("Add pet", type="primary")
+        if submit:
             try:
-                if not task_title.strip():
-                    raise ValueError("Enter a task title.")
-                new_task.title = task_title.strip()
-                selected_pet.add_task(new_task)
-                st.success(f"Task '{task_title}' added to {selected_pet.name}!")
-            except ValueError as e:
-                st.error(str(e))
+                pet = store.add_pet(name, species, int(age))
+            except (ValueError, sqlite3.Error, OSError) as error:
+                st.error(str(error) if isinstance(error, ValueError) else "Could not save this pet. Please try again.")
+            else:
+                st.session_state.notice = f"{pet.name} added."
+                st.rerun()
 
-# ══════════════════════════════════════════════════════════════════════════════
-# RIGHT — Today's Schedule
-# ══════════════════════════════════════════════════════════════════════════════
-with col_schedule:
-    st.subheader("Today's Schedule")
 
-    all_due = Scheduler.get_daily_tasks(owner, include_completed=True)
-    unfinished = [task for task in all_due if task.status != "done"]
+def basic_manual_form(store, owner):
+    if not owner.pets:
+        return
+    with st.expander("Add a care task"):
+        with st.form("manual_task"):
+            pet_id = st.selectbox("Assign to pet", [p.pet_id for p in owner.pets],
+                                  format_func=lambda value: owner.get_pet(value).name)
+            title = st.text_input("Task title", max_chars=120)
+            description = st.text_area("Description", max_chars=1000)
+            due = st.date_input("Date", value=local_today())
+            at = st.time_input("Time of day (optional)", value=None)
+            repeat = st.selectbox("Repeat", ["NONE", "DAILY", "WEEKLY", "CUSTOM"])
+            interval = st.number_input("Custom interval (days)", min_value=1, max_value=365, value=3)
+            submit = st.form_submit_button("Confirm and save", type="primary")
+        if submit:
+            try:
+                store.create_task(TaskDraft(pet_id, title, due, at, repeat, int(interval), description))
+            except (ValueError, sqlite3.Error, OSError) as error:
+                st.error(str(error) if isinstance(error, ValueError) else "Could not save this task. Your entries are still here.")
+            else:
+                st.session_state.notice = "Task saved."
+                st.rerun()
 
-    if not all_due:
-        st.info("No tasks due today. Add tasks on the left to build your pet's routine.")
-    else:
-        # ── Conflict warnings ──
-        conflicts = Scheduler.detect_conflicts(unfinished, pets=owner.pets)
-        if conflicts:
-            st.error(
-                f"**Scheduling conflict{'s' if len(conflicts) > 1 else ''} detected — action needed!**\n\n"
-                "Two or more unfinished tasks share a scheduled start time. "
-                "Check the care plan before doing these tasks.",
-                icon="🚨",
-            )
-            with st.expander(f"See {len(conflicts)} conflict detail{'s' if len(conflicts) > 1 else ''}"):
-                for warning in conflicts:
-                    st.markdown(f"- {warning}")
 
-        # ── Summary metrics ──
-        n_pending = sum(1 for t in all_due if t.status == "pending")
-        n_overdue = sum(1 for t in all_due if t.status == "overdue")
-        n_done    = sum(1 for t in all_due if t.status == "done")
-
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Pending", n_pending)
-        m2.metric("Overdue", n_overdue, delta=f"-{n_overdue}" if n_overdue else None,
-                  delta_color="inverse")
-        m3.metric("Done today", n_done)
-
-        # ── Filters ──
-        cf1, cf2 = st.columns(2)
-        with cf1:
-            filter_status = st.selectbox("Filter by status", ["all", "pending", "done", "overdue"])
-        with cf2:
-            pet_names = ["all"] + [p.name for p in owner.pets]
-            filter_pet = st.selectbox("Filter by pet", pet_names)
-
-        filtered = Scheduler.filter_tasks(
-            all_due,
-            status=None if filter_status == "all" else filter_status,
-            pet_name=None if filter_pet == "all" else filter_pet,
-            pets=owner.pets
-        )
-
-        if not filtered:
-            st.info("No tasks match the selected filters.")
-
-        # ── Task cards (sorted by time via Scheduler) ──
-        pet_lookup = {p.pet_id: p for p in owner.pets}
-        for task in Scheduler.sort_by_time(filtered):
-            pet = pet_lookup.get(task.assigned_pet_id)
-            pet_label  = pet.name if pet else "Unknown pet"
-            time_label = task.time_of_day.strftime("%I:%M %p") if task.time_of_day else "Anytime"
-            status     = task.status
-
-            tc1, tc2 = st.columns([4, 1])
-            with tc1:
-                if status == "done":
-                    st.success(
-                        f"**{task.title}** — {task.description}\n\n"
-                        f"{pet_label} · {time_label}",
-                        icon="✅",
-                    )
-                elif status == "overdue":
-                    st.warning(
-                        f"**{task.title}** — {task.description}\n\n"
-                        f"{pet_label} · {time_label} · Due {task.schedule.next_due_date}",
-                        icon="⏰",
-                    )
+def task_card(store, owner, entry, prefix):
+    task = entry.task
+    pet = owner.get_pet(task.assigned_pet_id)
+    with st.container(border=True):
+        st.text(task.title)
+        at = task.time_of_day.strftime("%I:%M %p").lstrip("0") if task.time_of_day else "Anytime"
+        state = "Planned repeat" if entry.projected else entry.status.capitalize()
+        st.caption(f"{pet.name} \u00b7 {at} \u00b7 {state}")
+        if task.description:
+            st.text(task.description)
+        if task.due_date:
+            st.caption(f"Due {task.due_date:%B %d, %Y}")
+        if task.schedule:
+            label = task.schedule.schedule_type.value
+            if label == "custom":
+                label = f"every {task.schedule.interval} days"
+            st.caption(f"Repeats {label}")
+        if entry.projected:
+            st.caption("Estimate; its date can shift when the preceding task is completed.")
+        elif entry.status != "done" and (task.due_date is None or task.due_date <= local_today()):
+            if st.button("Mark done", key=f"done_{prefix}_{task.task_id}"):
+                try:
+                    _, next_task = store.complete_task(task.task_id)
+                except (ValueError, sqlite3.Error, OSError) as error:
+                    st.error(str(error) if isinstance(error, ValueError) else "Could not save completion. Try again.")
                 else:
-                    st.info(
-                        f"**{task.title}** — {task.description}\n\n"
-                        f"{pet_label} · {time_label}",
-                        icon="📋",
-                    )
-            with tc2:
-                if status != "done":
-                    if st.button("Mark done", key=f"done_{task.task_id}", use_container_width=True):
-                        new_task = Scheduler.complete_and_reschedule(task, pet)
-                        if new_task:
-                            st.toast(f"Next '{task.title}' on {new_task.schedule.next_due_date} 📅")
-                        else:
-                            st.toast(f"'{task.title}' complete! ✅")
-                        st.rerun()
+                    st.session_state.notice = f"Done. Next occurrence: {next_task.due_date:%B %d}." if next_task else "Task completed."
+                    st.rerun()
+
+
+def calendar_page(store, owner):
+    st.header("Your calendar")
+    if not owner.pets:
+        st.info("Add a pet before creating care tasks.")
+        st.button("Add your first pet", on_click=navigate, args=("Pets",), type="primary")
+        return
+    basic_manual_form(store, owner)
+    selected = st.session_state.get("selected_day", local_today())
+    view = st.segmented_control("Calendar view", ["Week", "Agenda"], default="Week")
+    step = 7 if view == "Week" else 1
+    controls = st.columns([1, 1, 1, 4])
+    controls[0].button("Today", on_click=today_date, use_container_width=True)
+    controls[1].button("Previous", on_click=move_date, args=(-step,), use_container_width=True)
+    controls[2].button("Next", on_click=move_date, args=(step,), use_container_width=True)
+    selected = controls[3].date_input("Selected day", value=selected, key="selected_day")
+    filters = st.columns(2)
+    pet_id = filters[0].selectbox("Pet", [None] + [p.pet_id for p in owner.pets],
+                                format_func=lambda value: "All pets" if value is None else owner.get_pet(value).name)
+    status_label = filters[1].selectbox("Status", ["All", "Pending", "Overdue", "Done"])
+    status = None if status_label == "All" else status_label.lower()
+    due_today = Scheduler.get_daily_tasks(owner, include_completed=True)
+    metrics = st.columns(3)
+    metrics[0].metric("Pending", sum(t.status == "pending" for t in due_today))
+    metrics[1].metric("Overdue", sum(t.status == "overdue" for t in due_today))
+    metrics[2].metric("Done today", sum(t.last_completed_date == local_today() for t in owner.get_all_tasks()))
+    if view == "Week":
+        monday = selected - timedelta(days=selected.weekday())
+        st.subheader(f"{monday:%B %d} \u2013 {monday + timedelta(days=6):%B %d, %Y}")
+        with st.container(key="week_grid"):
+            for i, col in enumerate(st.columns(7)):
+                day = monday + timedelta(days=i)
+                with col:
+                    st.button(day.strftime("%a %d"), key=f"day_{i}", on_click=lambda d=day: st.session_state.update(selected_day=d),
+                              use_container_width=True, type="primary" if day == selected else "secondary")
+                    entries = filter_entries(entries_for_day(owner, day), pet_id, status)
+                    st.caption(f"{len(entries)} task{'s' if len(entries) != 1 else ''}")
+                    for entry in entries[:3]:
+                        st.text(entry.task.title)
+                    if len(entries) > 3:
+                        st.caption(f"+{len(entries)-3} more")
+        st.caption("Planned repeats are estimates. Viewing dates does not save or advance tasks.")
+    st.subheader(selected.strftime("%A, %B %d"))
+    warnings = day_conflicts(owner, selected)
+    for warning in warnings:
+        st.warning(warning)
+    entries = filter_entries(entries_for_day(owner, selected), pet_id, status)
+    if selected == local_today():
+        overdue = [t for t in owner.get_all_tasks() if t.status == "overdue"]
+        from calendar_view import CalendarEntry
+        overdue_entries = filter_entries([CalendarEntry(t, t.due_date) for t in Scheduler.sort_by_time(overdue)], pet_id, status)
+        if overdue_entries:
+            st.subheader("Overdue")
+            for entry in overdue_entries:
+                task_card(store, owner, entry, "overdue")
+    if not entries:
+        st.info("No tasks match this day and these filters.")
+    for entry in entries:
+        task_card(store, owner, entry, "agenda")
+
+
+def main():
+    st.title("PawPal AI Planner")
+    try:
+        store = PlannerStore()
+        owner = store.load()
+    except (sqlite3.Error, OSError):
+        st.error("Local storage is unavailable. Check folder permissions or PAWPAL_DB_PATH, then reload.")
+        return
+    if owner is None:
+        st.header("Create your local profile")
+        st.write("Save your name and timezone, then add a pet to plan their care.")
+        profile_form(store)
+        return
+    with using_timezone(owner.timezone):
+        if "notice" in st.session_state:
+            st.success(st.session_state.pop("notice"))
+        page = st.segmented_control("Navigation", ["Calendar", "Pets", "Settings"], default=None if "page" in st.session_state else "Calendar", key="page", label_visibility="collapsed")
+        if page == "Pets":
+            pets_page(store, owner)
+        elif page == "Settings":
+            st.header("Settings")
+            profile_form(store, owner)
+            st.subheader("Local saving")
+            st.text(str(store.path))
+            st.caption("Saved on this computer. No cloud sync or account login.")
+        else:
+            calendar_page(store, owner)
+
+
+main()
