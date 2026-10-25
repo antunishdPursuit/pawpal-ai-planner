@@ -9,7 +9,7 @@ from calendar_view import CalendarEntry, entries_for_day, filter_entries, day_co
 from pawpal_system import Scheduler
 from planner_clock import local_today, using_timezone
 from planner_storage import PlannerStore
-from task_editor import show_editor, open_editor, cancel_editor, map_search_url
+from task_editor import show_editor, open_editor, cancel_editor, has_draft_content, map_search_url
 from gemini_planner import is_configured, configuration
 from ui_components import task_summary, calendar_chip, brand
 
@@ -30,12 +30,7 @@ def remember_date():
     st.session_state.calendar_date = st.session_state.selected_day
 
 
-def dismiss_editor():
-    # Dismissal closes the dialog but preserves unsaved content.
-    st.session_state.editor_open = False
-
-
-@st.dialog("Plan a care task", width="medium", on_dismiss=dismiss_editor)
+@st.dialog("Plan a care task", width="medium", dismissible=False)
 def task_dialog(store, owner):
     with using_timezone(owner.timezone):
         show_editor(store, owner)
@@ -60,7 +55,7 @@ def activate_profile(owner_id):
     draft_prefix = draft.request_id + "_" if draft else None
     cancel_editor()
     for key in list(st.session_state):
-        if key.startswith("request_") or (draft_prefix and key.startswith(draft_prefix)):
+        if key.startswith("replace_") or key.startswith("request_") or (draft_prefix and key.startswith(draft_prefix)):
             st.session_state.pop(key, None)
     for key in ("calendar_date", "selected_day", "pending_selected_day", "calendar_pet",
                 "calendar_status", "calendar_view", "pet_name", "pet_species", "pet_age", "notice"):
@@ -112,14 +107,14 @@ def user_page(store, owner, profiles):
                 selected = st.selectbox("Saved users", [p.owner_id for p in others],
                                        format_func=lambda value: next(p.name for p in others if p.owner_id == value),
                                        key="user_choice")
-                if st.session_state.get("task_draft") or st.session_state.get("conversation"):
+                if has_draft_content(st.session_state.get("task_draft")) or st.session_state.get("conversation"):
                     st.warning("Changing users discards the current unsaved task draft and conversation.")
                 if st.button("Use this user", type="primary"):
                     activate_profile(selected)
                     st.rerun()
         with st.expander("Add a new local user", expanded=not profiles):
             st.caption("A name and timezone are all you need. No password or sign-in.")
-            if st.session_state.get("task_draft") or st.session_state.get("conversation"):
+            if has_draft_content(st.session_state.get("task_draft")) or st.session_state.get("conversation"):
                 st.warning("Creating a user discards the current unsaved task draft and conversation.")
             profile_form(store)
     with st.expander("Local saving and Gemini"):
@@ -321,6 +316,8 @@ def main():
         store = PlannerStore(root_store.path, owner_id=selected)
         owner = store.load() if selected is not None else None
         if owner is None:
+            if selected is not None:
+                activate_profile(None)
             st.session_state.active_owner_id = None
             st.session_state.page = "User"
         elif st.session_state.get("page") not in ("User", "Pets", "Calendar"):

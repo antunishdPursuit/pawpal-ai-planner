@@ -105,3 +105,7 @@ a:focus-visible {outline:3px solid var(--paw-primary)!important; outline-offset:
 
 .st-key-view_switch [role="radiogroup"] {display:flex; flex-direction:row; gap:var(--paw-space-2);}
 .st-key-current_user button,.st-key-workspace_nav button {justify-content:flex-start!important;}
+
+@media(max-width:480px) {
+ .st-key-confirm_actions [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {flex:1 1 100%;}
+}
