@@ -74,7 +74,7 @@ def start_over():
     st.session_state.entry_mode = "Manual"
 
 
-def conversation_input(owner, profiles):
+def conversation_input(store, owner, profiles):
     history = st.session_state.get("conversation", [])
     for item in history[-6:]:
         with st.chat_message(item["role"]):
@@ -90,7 +90,7 @@ def conversation_input(owner, profiles):
     if has_draft_content(draft):
         replace_allowed = st.checkbox("Replace my current draft with a new preview",
                                       key=f"replace_{draft.request_id}")
-    render_voice(owner, profiles, replace_allowed)
+    render_voice(store, owner, profiles, replace_allowed)
     if st.button("Create task preview", type="primary", disabled=not replace_allowed):
         if not request.strip():
             st.error("Describe the task you would like to plan.")
@@ -134,7 +134,7 @@ def show_editor(store, owner):
                         key="entry_mode", on_change=entry_mode_changed)
         if mode == "Conversation":
             with st.expander("Request and response", expanded=st.session_state.get("conversation_requested", False) or st.session_state.get("task_draft") is None or st.session_state.get("preview_blocked", False)):
-                conversation_input(owner, store.list_profiles())
+                conversation_input(store, owner, store.list_profiles())
         elif st.session_state.get("task_draft") is None:
             st.session_state.task_draft = TaskDraft(st.session_state.get("editor_pet_id") or owner.pets[0].pet_id, "",
                                                     st.session_state.get("editor_day") or local_today())

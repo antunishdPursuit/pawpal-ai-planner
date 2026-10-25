@@ -2,11 +2,12 @@ export default function({parentElement,data,setStateValue}) {
  const el=id=>parentElement.querySelector(`#${id}`), dictate=el("dictate"),live=el("live"),stop=el("stop"),review=el("review"),status=el("status"),transcript=el("transcript");
  let stream,input,output,source,processor,silent,socket,timer,connectTimer;
  let mode=null,disposed=false,ended=false,ready=false,proposal=null,history=[],buffers=[],frames=0,parts=[],partFrames=0,nextTime=0;
+ let candidate=null,candidateId=null,saveIntent=false,closingStarted=false,finishTimer,userTurns=0,candidateTurn=0;
  const playing=new Set(),message=text=>status.textContent=text;
  const usedKey="pawpal-voice-used-sessions";
  function usedSessions(){try{return JSON.parse(sessionStorage.getItem(usedKey)||"{}");}catch{return {};}}
  function available(){const c=data.credential;return c&&Date.now()/1000-c.issued_at<110&&!usedSessions()[c.session_id];}
- function markUsed(){try{const used=usedSessions(),now=Date.now();for(const id in used)if(now-used[id]>300000)delete used[id];used[data.credential.session_id]=now;sessionStorage.setItem(usedKey,JSON.stringify(used));}catch{}}
+ function markUsed(){try{const used=usedSessions(),now=Date.now();for(const id in used)if(now-used[id]>360000)delete used[id];used[data.credential.session_id]=now;sessionStorage.setItem(usedKey,JSON.stringify(used));}catch{}}
  const emit=payload=>{if(!disposed)setStateValue("event",{id:Date.now().toString(36)+Math.random().toString(36),...payload});};
  function controls(active) {
   dictate.disabled=active||!data.configured;live.disabled=active||!data.configured||!data.replace_allowed;
@@ -15,7 +16,7 @@ export default function({parentElement,data,setStateValue}) {
  }
  function stopPlayback(){for(const p of playing){try{p.stop();}catch{}}playing.clear();nextTime=0;}
  function release(){
-  clearTimeout(timer);clearTimeout(connectTimer);
+  clearTimeout(timer);clearTimeout(connectTimer);clearTimeout(finishTimer);
   if(processor){processor.port.onmessage=null;processor.disconnect();}source?.disconnect();silent?.disconnect();stream?.getTracks().forEach(t=>t.stop());
   if(socket){socket.onmessage=null;socket.onerror=null;socket.onclose=null;socket.close();}
   stopPlayback();input?.close().catch(()=>{});output?.close().catch(()=>{});
@@ -30,14 +31,17 @@ export default function({parentElement,data,setStateValue}) {
   v.setUint32(24,rate,true);v.setUint32(28,rate*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);text(36,"data");v.setUint32(40,samples.length,true);bytes.set(samples,44);return base64(bytes);
  }
  function append(role,text){
-  if(!text)return;if(history.at(-1)?.role===role)history.at(-1).text=(history.at(-1).text+text).slice(-2000);else history.push({role,text:text.slice(-2000)});
+  if(!text)return;if(role==="user"&&history.at(-1)?.role!=="user")userTurns++;
+  if(history.at(-1)?.role===role)history.at(-1).text=(history.at(-1).text+text).slice(-2000);else history.push({role,text:text.slice(-2000)});
   history=history.slice(-6);transcript.textContent=history.map(i=>`${i.role==="user"?"You":"PawPal"}: ${i.text}`).join("\n").slice(-1500);transcript.scrollTop=transcript.scrollHeight;
  }
  function finish(error=""){
   if(ended||disposed)return;ended=true;const which=mode,count=frames,chunks=buffers.slice(),rate=input?.sampleRate,result=!error&&proposal?{...proposal}:null;
-  if(result)delete result._callId;release();controls(false);message(error||"Stopped");
+  const completing=saveIntent&&candidate&&userTurns===candidateTurn+1;
+  if(result)delete result._callId;release();controls(false);message(completing?"Saving task...":error||"Stopped");
   if(which==="dictation"){if(count&&!error)emit({kind:"dictation",audio:wav(chunks,count,rate)});}
-  else emit({kind:"live_complete",proposal:result,history,error});
+  else emit({kind:"live_complete",proposal:completing?candidate:result,history,error:completing?"":error,
+             save_requested:Boolean(completing),confirmation_after_preview:userTurns===candidateTurn+1,proposal_id:candidateId,session_id:data.credential?.session_id});
  }
  function send(value){if(socket?.readyState===WebSocket.OPEN)socket.send(JSON.stringify(value));}
  function play(encoded){
@@ -64,7 +68,7 @@ export default function({parentElement,data,setStateValue}) {
   source.connect(processor);processor.connect(silent);silent.connect(input.destination);return true;
  }
  async function start(which){
-  mode=which;ended=false;ready=false;proposal=null;history=[];buffers=[];frames=0;transcript.textContent="";controls(true);message(which==="dictation"?"Listening...":"Connecting...");
+  mode=which;ended=false;ready=false;proposal=null;candidate=null;candidateId=null;saveIntent=false;closingStarted=false;userTurns=0;candidateTurn=0;history=[];buffers=[];frames=0;transcript.textContent="";controls(true);message(which==="dictation"?"Listening...":"Connecting...");
   try{
    if(which==="live"){output=new AudioContext({sampleRate:24000});await output.resume();}
    if(disposed||ended)return;
@@ -80,17 +84,27 @@ export default function({parentElement,data,setStateValue}) {
     if(c){
      if(c.interrupted){stopPlayback();proposal=null;review.hidden=true;}
      if(c.inputTranscription?.text){proposal=null;review.hidden=true;append("user",c.inputTranscription.text);}
-     if(c.outputTranscription?.text)append("assistant",c.outputTranscription.text);
-     for(const p of c.modelTurn?.parts||[])if(p.inlineData?.data){message("PawPal is speaking...");try{play(p.inlineData.data);}catch{message("Audio unavailable. Read the transcript.");}}
-     if(c.turnComplete)message(proposal?"Task ready":"Listening...");
+     if(c.outputTranscription?.text){if(saveIntent)closingStarted=true;append("assistant",c.outputTranscription.text);}
+     for(const p of c.modelTurn?.parts||[])if(p.inlineData?.data){if(history.at(-1)?.role==="user")history.push({role:"assistant",text:""});if(saveIntent)closingStarted=true;message("PawPal is speaking...");try{play(p.inlineData.data);}catch{message("Audio unavailable. Read the transcript.");}}
+     if(c.turnComplete){
+      if(saveIntent&&closingStarted){const remaining=output?Math.max(0,nextTime-output.currentTime):0;clearTimeout(finishTimer);finishTimer=setTimeout(()=>finish(),remaining*1000+100);}
+      else message(proposal?"Confirm the details aloud":"Listening...");
+     }
     }
     for(const call of result.toolCall?.functionCalls||[]){
+     if(call.name==="save_task"){
+      if(!candidate||call.args?.proposal_id!==candidateId||userTurns!==candidateTurn+1){send({toolResponse:{functionResponses:[{id:call.id,name:call.name,response:{error:"Preview and confirm the latest task first."}}]}});continue;}
+      saveIntent=true;closingStarted=false;ready=false;stream?.getTracks().forEach(t=>t.stop());if(processor){processor.port.onmessage=null;processor.disconnect();}source?.disconnect();
+      message("Finishing your task...");review.hidden=true;
+      send({toolResponse:{functionResponses:[{id:call.id,name:call.name,response:{status:"saving_requested",instruction:"Say only: I've got the details. I'll save that now. Then finish your turn."}}]}});
+      clearTimeout(finishTimer);finishTimer=setTimeout(()=>finish(),12000);continue;
+     }
      if(call.name!=="preview_task"){send({toolResponse:{functionResponses:[{id:call.id,name:call.name,response:{error:"Unsupported action"}}]}});continue;}
      if(!call.args||typeof call.args!=="object"||Array.isArray(call.args)){proposal=null;review.hidden=true;send({toolResponse:{functionResponses:[{id:call.id,name:call.name,response:{error:"Invalid preview"}}]}});continue;}
-     proposal=call.args;proposal._callId=call.id;review.hidden=false;message("Task ready");
-     send({toolResponse:{functionResponses:[{id:call.id,name:call.name,response:{status:"preview_ready_not_saved",instruction:"Ask the user to review the task in the app."}}]}});
+     proposal={...call.args};candidate={...call.args};candidateId=call.id;candidateTurn=userTurns;proposal._callId=call.id;review.hidden=false;message("Confirm the details aloud");
+     send({toolResponse:{functionResponses:[{id:call.id,name:call.name,response:{status:"awaiting_spoken_confirmation",proposal_id:candidateId,instruction:"Repeat the details, ask Shall I save it, then wait for an explicit user yes. Do not claim saved."}}]}});
     }
-    if(result.toolCallCancellation?.ids?.includes(proposal?._callId)){proposal=null;review.hidden=true;}
+    if(result.toolCallCancellation?.ids?.includes(candidateId)){proposal=null;candidate=null;candidateId=null;saveIntent=false;review.hidden=true;}
     if(result.goAway)finish("Session ended. Start a new conversation.");
    };
    socket.onerror=()=>finish("Voice connection failed. Try again or type.");socket.onclose=()=>{if(!ended)finish("Voice disconnected. Try again or type.");};

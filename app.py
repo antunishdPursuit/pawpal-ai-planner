@@ -340,6 +340,12 @@ def main():
         user_page(root_store, owner, profiles)
         return
     with using_timezone(owner.timezone):
+        target = st.session_state.pop("voice_calendar_target", None)
+        if target and target["owner_id"] == owner.owner_id:
+            st.session_state.calendar_owner = owner.owner_id
+            st.session_state.calendar_pet = target["pet_id"]
+            st.session_state.calendar_status = "All"
+            st.session_state.calendar_view = "Agenda"
         if "pending_selected_day" in st.session_state:
             select_date(st.session_state.pop("pending_selected_day"))
         if page == "Pets":
