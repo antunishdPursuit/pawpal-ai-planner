@@ -8,7 +8,11 @@ flowchart TD
     Conversation --> Dictation[Microphone dictation: Gemini Flash]
     Dictation --> Conversation
     Conversation --> Live[Gemini Live: one-use restricted credential]
-    Live --> Validator
+    Live --> Spoken{Owner confirms aloud?}
+    Spoken -->|changes| Live
+    Spoken -->|yes| VoiceSave[Validate latest proposal and spoken confirmation]
+    VoiceSave --> Service
+    Live -->|edit instead| Preview
     Store --> Shared[Read-only schedules across owners]
     Shared --> UI
     Gemini --> Validator[Validate fields and check same-date conflicts]

@@ -38,13 +38,13 @@ Dependencies are pinned to the versions verified in this build. Credentials and 
 Inside Conversation:
 
 - **Dictate:** allow the microphone, speak, then **Stop**. Gemini 3.8 Flash transcribes the recording into editable request text. Check names and dates before creating the preview.
-- **Talk live → Start live:** start a two-way conversation with Gemini 3.8 Live. **Review task** stops the conversation and opens a validated editable preview. **Stop** also ends the session. Confirm the task separately to save it.
+- **Talk live → Start live:** speak with Gemini 3.8 Live. PawPal repeats the task details and asks whether to save. Say **yes** to finish one task: the microphone stops, the closing audio finishes, the app saves the task once and opens its date in Agenda. Use **save anyway** for a time conflict. **Review task** remains an option for editing and button confirmation instead.
 
-The assistant knows the selected user and their pets. It can describe the local user list, but cannot change users, register pets, or schedule for another owner. Use the sidebar to change users first.
+The assistant knows the selected user, their pets and a bounded snapshot of unfinished tasks. It can describe the local user list, but cannot change users, register pets, or schedule for another owner. Use the sidebar to change users first.
 
 Voice needs a supported browser, microphone permission, network and a configured Gemini key. Dictation is limited to 30 seconds, live sessions to 3 minutes. Ending the dialog, changing modes/users or stopping releases the microphone, connection and playback. Typed/manual entry remains available.
 
-Live credentials are created server-side, restricted to the selected user's model/context/tools, usable once, and expire quickly. The long-lived API key never goes to the browser. Users/pets/tasks are saved in local SQLite, not as profiles in Gemini. Audio is sent only through the voice actions; transcripts and drafts remain temporary app state.
+Live credentials are created server-side, restricted to the selected user's model/context/tools, usable once, and expire quickly. The long-lived API key never goes to the browser. Live tokens expire after six minutes; the conversation itself remains limited to three minutes. Users/pets/tasks are saved in local SQLite, not as profiles in Gemini. Audio is sent only through the voice actions; transcripts and drafts remain temporary app state.
 
 Daily and weekly completion retains the completed occurrence and creates one next occurrence from the completion date. Custom routines update the same task and retain their latest completion date. Repeating tasks are not advanced by viewing the calendar. Planned future repeats are estimates; completing late can shift them.
 
@@ -165,6 +165,8 @@ Actual provider checks used synthetic speech, without capturing the user's micro
 One real Gemini 3.8 Live session returned greeting audio, accepted 16 kHz synthetic speech, returned a spoken reply and a valid October 26 / 08:00 / Mochi / Central Park preview. The temporary database remained unchanged before confirmation. Separate app checks confirmed that an approved voice proposal saved only after explicit confirmation and only for its owner.
 
 Browser checks verified the shared calendar, simplified navigation, the single Add task action, visible microphone controls, and the credential-to-Start live handoff. At 320px the dialog had no horizontal overflow. Dennis then tested Dictate and Talk live/Start live in the running app and reported that both work. Microphone dictation and spoken replies are therefore user-confirmed, separate from the synthetic/provider checks. Echo handling, barge-in and broader device/browser coverage have not been systematically tested.
+
+Voice completion was then checked with real synthetic speech: PawPal repeated the Mochi walk details and asked “Shall I save it?” Spoken “Yes, please” triggered the finish action; the closing words were “I've got the details. I'll save that now.” Exactly one task was persisted and retained after reopening SQLite. The app's **Task saved** notice appears only after a successful backend write/readback. Negative or changed replies, stale candidates, replayed events and conflicts were checked separately with disposable data. Dennis retested the live app and confirmed that spoken confirmation saved the task, stopped voice and opened the calendar.
 
 ## Reliability, privacy and tradeoffs
 
