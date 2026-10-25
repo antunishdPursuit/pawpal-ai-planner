@@ -113,7 +113,6 @@ def user_page(store, owner, profiles):
         if profiles:
             others = [p for p in profiles if owner is None or p.owner_id != owner.owner_id]
             if others:
-                st.subheader("Change user" if owner else "Choose a user")
                 selected = st.selectbox("Saved users", [p.owner_id for p in others],
                                        format_func=lambda value: next(p.name for p in others if p.owner_id == value),
                                        key="user_choice")

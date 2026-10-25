@@ -9,6 +9,7 @@ from calendar_view import draft_conflicts
 from planner_clock import local_today
 from task_contract import TaskDraft
 from gemini_planner import GeminiPlanner, PlannerError, is_configured
+from voice_ui import render_voice
 
 REPEATS = {"NONE": "Does not repeat", "DAILY": "Daily", "WEEKLY": "Weekly", "CUSTOM": "Custom"}
 
@@ -49,9 +50,13 @@ def cancel_editor():
     st.session_state.pop("editor_day", None)
     st.session_state.pop("editor_pet_id", None)
     st.session_state.pop("pending_request", None)
+    st.session_state.pop("voice_credential", None)
+    st.session_state.pop("voice_event_id", None)
+    st.session_state.pop("voice_error", None)
 
 
 def keep_draft():
+    st.session_state.pop("voice_credential", None)
     count = st.session_state.get("composer_count", 0)
     key = f"request_{count}"
     if key in st.session_state:
@@ -69,7 +74,7 @@ def start_over():
     st.session_state.entry_mode = "Manual"
 
 
-def conversation_input(owner):
+def conversation_input(owner, profiles):
     history = st.session_state.get("conversation", [])
     for item in history[-6:]:
         with st.chat_message(item["role"]):
@@ -85,6 +90,7 @@ def conversation_input(owner):
     if has_draft_content(draft):
         replace_allowed = st.checkbox("Replace my current draft with a new preview",
                                       key=f"replace_{draft.request_id}")
+    render_voice(owner, profiles, replace_allowed)
     if st.button("Create task preview", type="primary", disabled=not replace_allowed):
         if not request.strip():
             st.error("Describe the task you would like to plan.")
@@ -96,6 +102,7 @@ def conversation_input(owner):
                 st.session_state.planner_error = str(error)
                 st.session_state.preview_blocked = True
             else:
+                st.session_state.pop("voice_error", None)
                 st.session_state.conversation = (history + [
                     {"role": "user", "text": request},
                     {"role": "assistant", "text": result.message},
@@ -113,6 +120,7 @@ def conversation_input(owner):
 
 
 def entry_mode_changed():
+    st.session_state.pop("voice_credential", None)
     key = f"request_{st.session_state.get('composer_count', 0)}"
     if key in st.session_state:
         st.session_state.pending_request = st.session_state[key]
@@ -126,7 +134,7 @@ def show_editor(store, owner):
                         key="entry_mode", on_change=entry_mode_changed)
         if mode == "Conversation":
             with st.expander("Request and response", expanded=st.session_state.get("conversation_requested", False) or st.session_state.get("task_draft") is None or st.session_state.get("preview_blocked", False)):
-                conversation_input(owner)
+                conversation_input(owner, store.list_profiles())
         elif st.session_state.get("task_draft") is None:
             st.session_state.task_draft = TaskDraft(st.session_state.get("editor_pet_id") or owner.pets[0].pet_id, "",
                                                     st.session_state.get("editor_day") or local_today())
@@ -134,6 +142,13 @@ def show_editor(store, owner):
         if draft is None or (mode == "Conversation" and st.session_state.get("preview_blocked")):
             if draft is not None:
                 st.info("Your previous draft is preserved. Continue the conversation or choose Manual to review it.")
+            if st.button("Keep draft"):
+                keep_draft()
+                st.rerun()
+            return
+        if owner.find_pet(draft.pet_id) is None:
+            st.error("This draft belongs to another user. Start over.")
+            st.button("Start over", on_click=start_over)
             if st.button("Keep draft"):
                 keep_draft()
                 st.rerun()

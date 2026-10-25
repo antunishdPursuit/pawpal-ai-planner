@@ -1,0 +1,8 @@
+.voice-controls {display:flex; flex-wrap:wrap; gap:var(--paw-space-2);}
+button {font:inherit; color:var(--paw-primary); background:var(--paw-surface); border:1px solid var(--paw-border); border-radius:var(--paw-radius); min-height:var(--paw-control); padding:var(--paw-space-2) var(--paw-space-4); display:inline-flex; align-items:center; gap:var(--paw-space-2); cursor:pointer;}
+button[hidden] {display:none;} button:disabled {opacity:.5; cursor:default;}
+button:focus-visible {outline:3px solid var(--paw-primary); outline-offset:3px;}
+button[aria-pressed="true"],#review {background:var(--paw-primary);color:var(--paw-rail-text);}
+svg {width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:2;}
+p {font:inherit; color:var(--paw-muted); margin:var(--paw-space-2) 0;}
+.transcript {font:inherit; font-size:var(--paw-small); color:var(--paw-text); white-space:pre-wrap; overflow-wrap:anywhere; max-height:160px; overflow:auto;}
