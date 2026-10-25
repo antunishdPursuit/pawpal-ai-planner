@@ -83,7 +83,9 @@ def show_editor(store, owner):
         if draft is None or (mode == "Conversation" and st.session_state.get("preview_blocked")):
             if draft is not None:
                 st.info("Your previous draft is preserved. Continue the conversation or choose Manual to review it.")
-            st.button("Cancel", on_click=cancel_editor)
+            if st.button("Cancel"):
+                cancel_editor()
+                st.rerun()
             return
         st.subheader("Review your task")
         prefix = draft.request_id
@@ -115,7 +117,9 @@ def show_editor(store, owner):
         st.caption(f"{due:%A, %B %d, %Y} | {owner.timezone}" if due else "Choose a date.")
         st.caption("Nothing is saved until you confirm.")
         left, right = st.columns(2)
-        left.button("Cancel", on_click=cancel_editor, use_container_width=True)
+        if left.button("Cancel", use_container_width=True):
+            cancel_editor()
+            st.rerun()
         if right.button("Confirm and save", type="primary", use_container_width=True, disabled=due is None or (not anytime and at is None)):
             try:
                 saved = store.create_task(current, allow_conflicts=acknowledged)

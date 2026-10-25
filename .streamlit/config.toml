@@ -15,3 +15,12 @@ gatherUsageStats = false
 [server]
 address = "127.0.0.1"
 headless = true
+
+[theme.sidebar]
+backgroundColor = "#18332B"
+secondaryBackgroundColor = "#245C45"
+textColor = "#FFFFFF"
+primaryColor = "#DBE8DF"
+
+[client]
+toolbarMode = "minimal"
