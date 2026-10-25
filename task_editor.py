@@ -30,6 +30,7 @@ def cancel_editor():
     st.session_state.pop("conversation", None)
     st.session_state.pop("planner_error", None)
     st.session_state.pop("composer_count", None)
+    st.session_state.pop("preview_blocked", None)
 
 
 def conversation_input(owner):
@@ -52,6 +53,7 @@ def conversation_input(owner):
                     result = GeminiPlanner().propose(request, owner, history)
             except (PlannerError, ValueError) as error:
                 st.session_state.planner_error = str(error)
+                st.session_state.preview_blocked = True
             else:
                 st.session_state.conversation = (history + [
                     {"role": "user", "text": request},
@@ -59,6 +61,7 @@ def conversation_input(owner):
                 ])[-6:]
                 st.session_state.pop("planner_error", None)
                 st.session_state.composer_count = count + 1
+                st.session_state.preview_blocked = result.draft is None
                 if result.draft is not None:
                     st.session_state.task_draft = result.draft
                 st.rerun()
@@ -70,21 +73,23 @@ def show_editor(store, owner):
     with st.container(border=True):
         st.subheader("Plan a care task")
         mode = st.segmented_control("Entry method", ["Conversation", "Manual"],
-                                    default=None if "entry_mode" in st.session_state else "Manual", key="entry_mode")
+                                    default=None if "entry_mode" in st.session_state else "Manual", key="entry_mode") or "Conversation"
         if mode == "Conversation":
-            with st.expander("Conversation", expanded=st.session_state.get("task_draft") is None):
+            with st.expander("Conversation", expanded=st.session_state.get("task_draft") is None or st.session_state.get("preview_blocked", False)):
                 conversation_input(owner)
         elif st.session_state.get("task_draft") is None:
             st.session_state.task_draft = TaskDraft(owner.pets[0].pet_id, "", local_today())
         draft = st.session_state.get("task_draft")
-        if draft is None:
+        if draft is None or (mode == "Conversation" and st.session_state.get("preview_blocked")):
+            if draft is not None:
+                st.info("Your previous draft is preserved. Continue the conversation or choose Manual to review it.")
             st.button("Cancel", on_click=cancel_editor)
             return
         st.subheader("Review your task")
         prefix = draft.request_id
         pet_ids = [p.pet_id for p in owner.pets]
         pet_id = st.selectbox("Assign to pet", pet_ids, index=pet_ids.index(draft.pet_id) if draft.pet_id in pet_ids else 0,
-                             format_func=lambda value: owner.get_pet(value).name, key=f"{prefix}_pet")
+                             format_func=lambda value: f"{owner.get_pet(value).name} (ID {value})", key=f"{prefix}_pet")
         title = st.text_input("Task title", value=draft.title, max_chars=120, key=f"{prefix}_title")
         due = st.date_input("Date", value=draft.due_date or local_today(), key=f"{prefix}_date")
         anytime = st.checkbox("Anytime", value=draft.time_of_day is None, key=f"{prefix}_anytime")

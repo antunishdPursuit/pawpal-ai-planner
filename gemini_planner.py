@@ -19,6 +19,12 @@ from planner_clock import local_today, using_timezone
 from task_contract import TaskDraft, clean_text
 
 logger = logging.getLogger("pawpal.planner")
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger.addHandler(handler)
+logger.setLevel(logging.INFO)
+logger.propagate = False
 DEFAULT_MODEL = "gemini-3.8-flash"
 INSTRUCTION = """
 You help a local pet owner create ONE care task at a time.

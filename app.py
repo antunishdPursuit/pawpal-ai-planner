@@ -138,7 +138,7 @@ def calendar_workspace(store, owner):
         return
     filters = st.columns(2)
     pet_id = filters[0].selectbox("Pet", [None] + [p.pet_id for p in owner.pets],
-                                format_func=lambda value: "All pets" if value is None else owner.get_pet(value).name)
+                                format_func=lambda value: "All pets" if value is None else f"{owner.get_pet(value).name} (ID {value})")
     status_label = filters[1].selectbox("Status", ["All", "Pending", "Overdue", "Done"])
     status = None if status_label == "All" else status_label.lower()
     due_today = Scheduler.get_daily_tasks(owner, include_completed=True)
