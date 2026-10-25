@@ -153,14 +153,13 @@ def show_editor(store, owner):
                 keep_draft()
                 st.rerun()
             return
-        st.subheader("Review your task")
-        st.button("Start over", on_click=start_over, help="Discard this draft and conversation")
+        review_heading = st.container()
         prefix = draft.request_id
         pet_ids = [p.pet_id for p in owner.pets]
         title = st.text_input("Task title", value=draft.title, max_chars=120, key=f"{prefix}_title")
         pet_col, date_col = st.columns(2)
         pet_id = pet_col.selectbox("Assign to pet", pet_ids, index=pet_ids.index(draft.pet_id) if draft.pet_id in pet_ids else 0,
-                                   format_func=lambda value: f"{owner.get_pet(value).name} (ID {value})", key=f"{prefix}_pet")
+                                   format_func=lambda value: owner.get_pet(value).name, key=f"{prefix}_pet")
         due = date_col.date_input("Date", value=draft.due_date or local_today(), key=f"{prefix}_date")
         repeat_col, time_col = st.columns(2)
         repeat = repeat_col.selectbox("Repeat", list(REPEATS), index=list(REPEATS).index(draft.repeat),
@@ -178,6 +177,10 @@ def show_editor(store, owner):
         current = replace(draft, pet_id=pet_id, title=title, due_date=due, time_of_day=None if anytime else at,
                           repeat=repeat, interval_days=int(interval), location=location, description=description)
         st.session_state.task_draft = current
+        if has_draft_content(current):
+            with review_heading:
+                st.subheader("Review your task")
+                st.button("Start over", on_click=start_over, help="Discard this draft and conversation")
         warnings = draft_conflicts(owner, current)
         for warning in warnings:
             st.warning(warning)
@@ -186,7 +189,6 @@ def show_editor(store, owner):
             acknowledged = st.checkbox("Keep this time despite the conflict",
                                        key=f"{prefix}_conflict_{due}_{at}_{pet_id}_{repeat}_{interval}")
         st.caption(f"{due:%A, %B %d, %Y} | {owner.timezone}" if due else "Choose a date.")
-        st.caption("Nothing is saved until you confirm.")
         with st.container(key="confirm_actions"):
             left, right = st.columns(2)
             if left.button("Keep draft", use_container_width=True):
