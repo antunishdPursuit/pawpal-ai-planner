@@ -1,0 +1,21 @@
+flowchart TD
+    User[Pet owner] --> UI[Streamlit: Calendar / Pets / Settings]
+    UI --> Manual[Manual task entry]
+    UI --> Conversation[Typed conversation]
+    Store[(Local SQLite)] --> Context[Relevant pets and tasks]
+    Context --> Gemini[Gemini structured planner]
+    Conversation --> Gemini
+    Gemini --> Validator[Validate fields and check same-date conflicts]
+    Manual --> Validator
+    Validator -->|missing details| Clarify[Ask a clarifying question]
+    Clarify --> Conversation
+    Validator --> Preview[Editable task preview]
+    Preview --> Confirm{Owner confirms?}
+    Confirm -->|cancel| UI
+    Confirm -->|yes| Service[Validate again and save once]
+    Service --> Domain[Owner / Pet / Task / Scheduler]
+    Domain --> Store
+    Store --> Readback[Verify saved task]
+    Readback --> UI
+    Gemini -->|unavailable| Manual
+    UI --> Maps[Map search from confirmed location]
