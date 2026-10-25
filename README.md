@@ -164,7 +164,7 @@ Actual provider checks used synthetic speech, without capturing the user's micro
 
 One real Gemini 3.8 Live session returned greeting audio, accepted 16 kHz synthetic speech, returned a spoken reply and a valid October 26 / 08:00 / Mochi / Central Park preview. The temporary database remained unchanged before confirmation. Separate app checks confirmed that an approved voice proposal saved only after explicit confirmation and only for its owner.
 
-Browser checks verified the shared calendar, simplified navigation, the single Add task action, visible microphone controls, and the credential-to-Start live handoff. At 320px the dialog had no horizontal overflow. Physical microphone capture, actual speaker playback/echo and user barge-in remain a device acceptance check; the synthetic/provider tests do not establish them.
+Browser checks verified the shared calendar, simplified navigation, the single Add task action, visible microphone controls, and the credential-to-Start live handoff. At 320px the dialog had no horizontal overflow. Dennis then tested Dictate and Talk live/Start live in the running app and reported that both work. Microphone dictation and spoken replies are therefore user-confirmed, separate from the synthetic/provider checks. Echo handling, barge-in and broader device/browser coverage have not been systematically tested.
 
 ## Reliability, privacy and tradeoffs
 
