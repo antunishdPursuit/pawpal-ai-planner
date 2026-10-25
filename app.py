@@ -10,6 +10,7 @@ from pawpal_system import Scheduler
 from planner_clock import local_today, using_timezone
 from planner_storage import PlannerStore
 from task_editor import show_editor, open_editor, map_search_url
+from gemini_planner import is_configured, configuration
 
 st.set_page_config(page_title="PawPal AI Planner", page_icon=favicon(), layout="wide")
 apply_theme()
@@ -108,8 +109,11 @@ def calendar_page(store, owner):
         st.info("Add a pet before creating care tasks.")
         st.button("Add your first pet", on_click=navigate, args=("Pets",), type="primary")
         return
-    st.button("Add task manually", on_click=open_editor,
-              args=(owner.pets[0].pet_id, st.session_state.get("selected_day", local_today())))
+    actions = st.columns([1, 1, 3])
+    actions[0].button("Plan with PawPal", type="primary", on_click=open_editor,
+                      args=(owner.pets[0].pet_id, st.session_state.get("selected_day") or local_today(), "Conversation"))
+    actions[1].button("Add task manually", on_click=open_editor,
+                      args=(owner.pets[0].pet_id, st.session_state.get("selected_day") or local_today(), "Manual"))
     if st.session_state.get("editor_open"):
         calendar_col, editor_col = st.columns([7, 3], gap="large")
         with calendar_col:
@@ -204,6 +208,11 @@ def main():
             st.subheader("Local saving")
             st.text(str(store.path))
             st.caption("Saved on this computer. No cloud sync or account login.")
+            st.subheader("Gemini")
+            st.write("Configured" if is_configured() else "Not configured")
+            st.text("Model: " + configuration()[1])
+            st.caption("Set GEMINI_API_KEY in the repository's local .env file. The key is never saved in the task database.")
+            st.caption("One request per Create task preview. A 30-second timeout and no automatic retries bound requests. Manual entry works without Gemini.")
         else:
             calendar_page(store, owner)
 
