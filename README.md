@@ -55,7 +55,6 @@ Overdue items keep their actual due date. Untimed tasks appear as Anytime. Calen
 - [System architecture Mermaid source](diagrams/architecture.mmd)
 - [SQLite ERD Mermaid source](diagrams/erd.mmd)
 - [Original domain UML](diagrams/uml_final.mmd)
-- [Original PawPal+ walkthrough and evidence](docs/pawpal_baseline.md)
 
 `gemini_planner.py` proposes a structured task. `task_contract.py` validates it against registered pets and supported fields. `task_editor.py` requires an editable human confirmation. `planner_storage.py` rechecks against current saved data under a transaction, delegates recurrence to the original domain model, and reads the result back. `calendar_view.py` computes views and estimated recurrences without writes.
 
@@ -178,7 +177,7 @@ Voice completion was then checked with real synthetic speech: PawPal repeated th
 - A map link is an encoded Google Maps search from confirmed text, not an AI-generated URL or a verified address.
 - Confirmed data stays on the computer. Gemini receives the typed request, recent conversation and bounded pet/task context; Google receives a location when you open its map link.
 - No cloud sync, reminders, route planning, veterinary advice, duration-aware optimization or guided tour. Pet/task deletion and editing existing tasks are not new UI features in this version.
-- The original CLI and domain methods remain. The historical `reflection.md` belongs to the base project; this extension's responsible-AI record is `model_card.md`.
+- The original CLI and domain methods remain. See [model_card.md](model_card.md) for this planner's responsible-AI record.
 
 ## Project reflection
 
