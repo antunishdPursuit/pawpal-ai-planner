@@ -1,23 +1,35 @@
 <div class="paw-landing" id="paw-home-top" tabindex="-1">
   <div class="paw-home-travel">
     <section class="paw-home-scene" aria-label="Pet care at home">
+      <div class="paw-home-hero">
       <img class="paw-home-room paw-layer" src="data:image/webp;base64,__ROOM_IMAGE__" alt="">
-      <div class="paw-home-copy paw-layer"><h1>Care comes together.</h1>
+      <div class="paw-home-copy paw-layer">
+        <h1>Care comes together.</h1>
         <p>Plan your pet’s day, one thoughtful task at a time.</p>
-        <a href="#paw-home-cards" id="paw-explore">Explore story</a></div>
+        <a href="#paw-step-1" id="paw-explore">Explore story</a>
+      </div>
       <img class="paw-home-dog paw-layer" src="data:image/webp;base64,__DOG_IMAGE__" alt="A golden retriever resting at home">
       <img class="paw-home-cat paw-layer" src="data:image/webp;base64,__CAT_IMAGE__" alt="A tabby cat stretching nearby">
       <div class="paw-home-fade"></div>
-      <section class="paw-home-story" id="paw-home-cards" tabindex="-1" aria-label="How PawPal works">
-    <div class="paw-home-cards">
-      <section class="paw-home-card"><h2>Tell PawPal</h2><p>Describe the care your pet needs.</p>
-        <div class="paw-home-example"><small>Example request</small>Walk Luna tomorrow at 9 AM.</div></section>
-      <section class="paw-home-card"><h2>Review the details</h2><p>Check the task before you save it.</p>
-        <div class="paw-home-example"><small>Example preview</small><strong>Walk Luna</strong>Tomorrow · 9:00 AM</div></section>
-      <section class="paw-home-card"><h2>See your plan</h2><p>Find your confirmed task on the calendar.</p>
-        <div class="paw-home-example"><small>Example calendar</small><strong>Tomorrow</strong>9:00 AM · Walk Luna</div></section>
-    </div>
-    <div class="paw-home-footer"><a href="#paw-home-top" id="paw-back-top">Back to top</a></div>
+      </div>
+      <section class="paw-home-story" id="paw-home-cards" aria-label="How PawPal works">
+        <div class="paw-home-cards">
+          <section class="paw-home-card" id="paw-step-1" tabindex="-1" aria-labelledby="paw-tell-title">
+            <div class="paw-home-detail"><h2 id="paw-tell-title">Tell PawPal</h2><p>Describe the care your pet needs.</p>
+              <a class="paw-next" href="#paw-step-2">Next: Review the details</a></div>
+            <div class="paw-home-example"><small>Example request</small>Walk Luna tomorrow at 9 AM.</div>
+          </section>
+          <section class="paw-home-card" id="paw-step-2" tabindex="-1" aria-labelledby="paw-review-title">
+            <div class="paw-home-detail"><h2 id="paw-review-title">Review the details</h2><p>Check the task before you save it.</p>
+              <a class="paw-next" href="#paw-step-3">Next: See your plan</a></div>
+            <div class="paw-home-example"><small>Example preview</small><strong>Walk Luna</strong>Tomorrow · 9:00 AM</div>
+          </section>
+          <section class="paw-home-card" id="paw-step-3" tabindex="-1" aria-labelledby="paw-plan-title">
+            <div class="paw-home-detail"><h2 id="paw-plan-title">See your plan</h2><p>Find your confirmed task on the calendar.</p></div>
+            <div class="paw-home-example"><small>Example calendar</small><strong>Tomorrow</strong>9:00 AM · Walk Luna</div>
+          </section>
+        </div>
+        <div class="paw-home-footer"><a href="#paw-home-top" id="paw-back-top">Back to top</a></div>
       </section>
     </section>
   </div>
