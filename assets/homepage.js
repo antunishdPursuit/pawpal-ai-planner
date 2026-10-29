@@ -18,15 +18,24 @@
   const stops = [0, 1.3, 2.3, 3.4];
   // Start as the final message appears, before its 240ms fade finishes.
   const openingLead = 1560;
-  const scrollDuration = 20000;
+  // Compress only the opening; later story phases keep their original pace.
+  const openingScrollEnd = .5;
+  const openingStoryEnd = .8;
+  const openingOffset = openingStoryEnd - openingScrollEnd;
+  const scrollLength = 3.4 - openingOffset;
+  const scrollDuration = 20000 * scrollLength / 3.4;
   const duration = openingLead + scrollDuration;
   const clamp = value => Math.max(0, Math.min(1, value));
   const smooth = value => { value = clamp(value); return value * value * (3 - 2 * value); };
   const start = () => main.scrollTop + travel.getBoundingClientRect().top - main.getBoundingClientRect().top;
-  const units = () => Math.max(0, (main.scrollTop - start()) / scene.clientHeight);
+  const scrollUnits = () => Math.max(0, (main.scrollTop - start()) / scene.clientHeight);
+  const units = () => {
+    const scroll = scrollUnits();
+    return scroll < openingScrollEnd ? scroll * openingStoryEnd / openingScrollEnd : scroll + openingOffset;
+  };
   let running = false, finished = false, autoMode = false, elapsed = 0, last = 0;
   let active = 0, queued = false, frame = 0, pendingFocus = null;
-  let keyboardNavigation = false, history = [], closing = null;
+  let keyboardNavigation = false, resumeOnVisible = false, history = [], closing = null;
 
   function announceStatus() {
     status.textContent = reduce.matches ? 'Reduced motion. Scroll to explore the story.' : running ? 'Story playing once.' : finished ? 'Story finished.' : 'Story paused.';
@@ -82,6 +91,7 @@
     if ((running || finished) && history.at(-1) !== active) history.push(active);
     root.dataset.step = String(active);
     root.dataset.units = u.toFixed(3);
+    root.dataset.scrollUnits = scrollUnits().toFixed(3);
     root.dataset.petProgress = petProgress.toFixed(3);
     root.dataset.chatCount = String(chatCount);
     root.dataset.playing = String(running);
@@ -89,13 +99,14 @@
   }
 
   // After the opening message reveal, one slower pass with no panel holds.
-  const timeline = t => 3.4 * clamp((t - openingLead) / scrollDuration);
+  const timeline = t => scrollLength * clamp((t - openingLead) / scrollDuration);
   function tick(now) {
     queued = false;
     if (!root.isConnected) { cleanup(); return; }
     if (running) {
       if (last) elapsed = Math.min(duration, elapsed + Math.min(now - last, 80));
       last = now;
+      if (elapsed > openingLead) window.pawHomeAutoplaySeen = true;
       main.scrollTo({top:start() + timeline(elapsed) * scene.clientHeight, behavior:'instant'});
       if (elapsed >= duration) { running = false; finished = true; announceStatus(); }
     } else last = 0;
@@ -110,8 +121,10 @@
     schedule();
   }
   function reset(startPlaying, focus = false) {
-    running = startPlaying && !reduce.matches;
-    autoMode = running;
+    const wantsPlayback = startPlaying && !reduce.matches;
+    running = wantsPlayback && !document.hidden;
+    resumeOnVisible = wantsPlayback && document.hidden;
+    autoMode = wantsPlayback;
     finished = false; elapsed = 0; last = 0; history = [];
     pendingFocus = focus ? {target:root, position:0} : null;
     main.scrollTo({top:0, behavior:'instant'});
@@ -123,28 +136,47 @@
     keyboardNavigation = false;
     reset(event.currentTarget === footerBack, true);
   }
-  function manual(event) {
-    if (event.type === 'pointerdown') keyboardNavigation = false;
-    autoMode = false; stop();
+  function pointerInput(event) {
+    keyboardNavigation = false;
+    const scrollbarStart = main.getBoundingClientRect().left + main.clientWidth;
+    if (main.scrollHeight > main.clientHeight && event.clientX >= scrollbarStart) {
+      manual(); return;
+    }
+    // Navigation consumes the intro; a tap on the picture leaves it playing.
+    if (event.target.closest('button,a')) window.pawHomeAutoplaySeen = true;
+  }
+  function manual() {
+    resumeOnVisible = false; autoMode = false;
+    window.pawHomeAutoplaySeen = true;
+    stop();
   }
   function keydown(event) {
-    if (event.key === 'Tab') { keyboardNavigation = true; autoMode = false; stop(); }
+    if (event.key === 'Tab') { keyboardNavigation = true; manual(); }
     if (!event.target.closest('button,a') && ['ArrowDown','ArrowUp','PageDown','PageUp','Home','End',' '].includes(event.key)) {
-      autoMode = false; stop();
+      manual();
     }
   }
-  function focusin() { if (keyboardNavigation) stop(); }
-  function visibility() { if (document.hidden) stop(); last = 0; }
+  function focusin() { if (keyboardNavigation) manual(); }
+  function visibility() {
+    if (document.hidden) {
+      if (running) { resumeOnVisible = true; stop(); }
+    } else if (resumeOnVisible && !reduce.matches) {
+      resumeOnVisible = false; running = true;
+      announceStatus(); schedule();
+    }
+    last = 0;
+  }
   function preferenceChanged() {
-    stop(); autoMode = false;
+    manual();
     announceStatus(); schedule();
   }
   const observer = new MutationObserver(() => { if (!root.isConnected) cleanup(); else schedule(); });
   function cleanup() {
-    running = false;
+    running = false; resumeOnVisible = false;
     main.removeEventListener('scroll', schedule);
     window.removeEventListener('resize', schedule);
-    ['wheel','touchstart','pointerdown'].forEach(name => main.removeEventListener(name, manual));
+    ['wheel','touchmove'].forEach(name => main.removeEventListener(name, manual));
+    main.removeEventListener('pointerdown', pointerInput);
     document.removeEventListener('keydown', keydown);
     document.removeEventListener('focusin', focusin);
     document.removeEventListener('visibilitychange', visibility);
@@ -157,7 +189,8 @@
   window.pawHomeCleanup = cleanup;
   main.addEventListener('scroll', schedule, {passive:true});
   window.addEventListener('resize', schedule);
-  ['wheel','touchstart','pointerdown'].forEach(name => main.addEventListener(name, manual, {passive:true}));
+  ['wheel','touchmove'].forEach(name => main.addEventListener(name, manual, {passive:true}));
+  main.addEventListener('pointerdown', pointerInput, {passive:true});
   document.addEventListener('keydown', keydown);
   document.addEventListener('focusin', focusin);
   document.addEventListener('visibilitychange', visibility);
@@ -166,6 +199,5 @@
   brand.addEventListener('click', toTop);
   observer.observe(main, {childList:true, subtree:true});
   const autoplay = !window.pawHomeAutoplaySeen;
-  window.pawHomeAutoplaySeen = true;
   reset(autoplay);
 })();

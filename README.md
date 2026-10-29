@@ -115,6 +115,16 @@ python -B -m pytest -p no:cacheprovider -q
 python -B main.py
 ```
 
+Run the homepage interaction regressions separately with Node.js (no package installation):
+
+```powershell
+node --test tests/homepage.test.cjs
+```
+
+These checks use a deterministic DOM and animation-clock model for autoplay,
+visibility, picture clicks, manual takeover, and scroll mapping. Verify layout,
+images, and the native planner callback in a browser as well.
+
 Observed existing-test result:
 
 ```text
