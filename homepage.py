@@ -19,11 +19,11 @@ def _homepage_html():
     script = (ASSETS / "homepage.js").read_text(encoding="utf8")
     for layer in ("room", "dog", "cat"):
         markup = markup.replace(f"__{layer.upper()}_IMAGE__", _hero_image(f"home-{layer}.webp"))
+    markup = markup.replace("__BRAND_IMAGE__", _hero_image("favicon.png"))
     return "<style>" + css + "</style>" + markup + "<script>" + script + "</script>"
 
 
 def show_home(open_planner):
     with st.container(key="homepage_navigation", horizontal=True, vertical_alignment="center"):
-        st.button("PawPal AI Planner", key="home_brand")
         st.button("Open planner", type="primary", on_click=open_planner, key="home_open_planner")
     st.html(_homepage_html(), unsafe_allow_javascript=True)

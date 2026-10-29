@@ -6,108 +6,102 @@
 
   const travel = root.querySelector('.paw-home-travel');
   const scene = root.querySelector('.paw-home-scene');
-  const room = root.querySelector('.paw-home-room');
   const dog = root.querySelector('.paw-home-dog');
   const cat = root.querySelector('.paw-home-cat');
-  const copy = root.querySelector('.paw-home-copy');
-  const story = document.getElementById('paw-home-cards');
-  const steps = [...root.querySelectorAll('.paw-home-card')];
-  const links = [...root.querySelectorAll('#paw-explore, .paw-next')];
+  const stages = [...root.querySelectorAll('.paw-home-stage')];
+  const progress = root.querySelector('.paw-home-progress');
+  const dots = [...progress.querySelectorAll('button')];
+  const explore = document.getElementById('paw-explore');
   const back = document.getElementById('paw-back-top');
-  const brand = document.querySelector('.st-key-home_brand button');
+  const brand = root.querySelector('.paw-home-brand');
   const reduce = matchMedia('(prefers-reduced-motion: reduce)');
-  // Scroll distances are viewport units: opening hold, departure, three reading stops.
-  const stops = [1.2, 2.05, 2.9];
-  const switches = [[1.65, 2.05], [2.5, 2.9]];
-  let queued = false, frame = 0, pendingFocus = null;
+  const stops = [0, .8, 1.65, 2.5];
   const clamp = value => Math.max(0, Math.min(1, value));
   const smooth = value => { value = clamp(value); return value * value * (3 - 2 * value); };
-  const navHeight = () => parseFloat(getComputedStyle(root).getPropertyValue('--paw-home-nav-height'));
-  const viewport = () => main.clientHeight;
-  const travelStart = () => main.scrollTop + travel.getBoundingClientRect().top - main.getBoundingClientRect().top - navHeight();
-  const behavior = () => reduce.matches ? 'auto' : 'smooth';
-
-  function top(event) {
-    event.preventDefault();
-    event.stopPropagation();
-    pendingFocus = null;
-    main.scrollTo({top: 0, behavior: behavior()});
-    root.focus({preventScroll: true});
-  }
-
-  function go(event) {
-    event.preventDefault();
-    const target = document.getElementById(event.currentTarget.hash.slice(1));
-    const index = steps.indexOf(target);
-    if (reduce.matches) {
-      target.scrollIntoView({block: 'start', behavior: 'auto'});
-      target.focus({preventScroll: true});
-    } else {
-      const position = travelStart() + stops[index] * viewport();
-      pendingFocus = {target, position};
-      main.scrollTo({top: position, behavior: behavior()});
-      schedule();
-    }
-  }
+  const start = () => main.scrollTop + travel.getBoundingClientRect().top - main.getBoundingClientRect().top;
+  let queued = false, frame = 0, reducedStage = 0, pendingFocus = null;
 
   function update() {
     queued = false;
     if (!root.isConnected) { cleanup(); return; }
-    const units = Math.max(0, (main.scrollTop - travelStart()) / viewport());
-    const p = reduce.matches ? 0 : clamp(units - .2);
-    const part = smooth(p / .95);
-    const reveal = smooth((p - .12) / .88);
-    const width = scene.clientWidth;
-    room.style.transform = `translateY(${-12 * p}px)`;
-    dog.style.transform = `translateX(${(width * .52 + 24) * part}px)`;
-    cat.style.transform = `translateX(${-(width * .36 + 24) * part}px)`;
-    copy.style.opacity = String(1 - smooth(p / .48));
-    copy.style.transform = `translateY(${-32 * p}px)`;
-    copy.inert = !reduce.matches && p > .48;
-    story.style.transform = `translateY(${(1 - reveal) * 100}%)`;
-    story.inert = !reduce.matches && reveal < .01;
+    const units = reduce.matches ? stops[reducedStage] : Math.max(0, (main.scrollTop - start()) / scene.clientHeight);
+    const active = units < .4 ? 0 : units < 1.15 ? 1 : units < 2.3 ? 2 : 3;
+    const alpha = reduce.matches ? stages.map((_, index) => Number(index === active)) : [
+      1 - smooth((units - .25) / .15),
+      smooth((units - .4) / .15) * (1 - smooth((units - 1) / .15)),
+      smooth((units - 1.15) / .15) * (1 - smooth((units - 2.15) / .15)),
+      smooth((units - 2.3) / .15),
+    ];
+    // Reuse the original images at a constant scale. Only their X position changes.
+    // Tell is complete before departure starts; both full image boxes exit before See.
+    const petProgress = smooth((units - 1.15) / 1);
+    const dogExit = scene.clientWidth - dog.offsetLeft + 8;
+    const catExit = cat.offsetLeft + cat.offsetWidth + 8;
+    dog.style.transform = `translateX(${dogExit * petProgress}px)`;
+    cat.style.transform = `translateX(${-catExit * petProgress}px)`;
 
-    const firstSwitch = smooth((units - switches[0][0]) / (switches[0][1] - switches[0][0]));
-    const secondSwitch = smooth((units - switches[1][0]) / (switches[1][1] - switches[1][0]));
-    const exposure = [1 - firstSwitch, firstSwitch * (1 - secondSwitch), secondSwitch];
-    const shift = [-100 * firstSwitch, 100 * (1 - firstSwitch - secondSwitch), 100 * (1 - secondSwitch)];
-    const activeIndex = units < 1.85 ? 0 : units < 2.7 ? 1 : 2;
-    steps.forEach((step, index) => {
-      step.style.opacity = '1';
-      step.style.transform = `translateY(${shift[index]}%)`;
-      step.style.visibility = reduce.matches || exposure[index] > .001 ? 'visible' : 'hidden';
-      step.inert = !reduce.matches && (index !== activeIndex || reveal < .01);
+    stages.forEach((stage, index) => {
+      stage.style.opacity = String(alpha[index]);
+      stage.style.visibility = alpha[index] > .001 ? 'visible' : 'hidden';
+      stage.inert = index !== active || alpha[index] < .001;
+      stage.setAttribute('aria-hidden', String(stage.inert));
     });
-    if (pendingFocus && Math.abs(main.scrollTop - pendingFocus.position) < 2) {
-      pendingFocus.target.focus({preventScroll: true});
+    progress.style.visibility = active > 0 ? 'visible' : 'hidden';
+    progress.inert = active === 0;
+    progress.setAttribute('aria-hidden', String(active === 0));
+    dots.forEach(dot => {
+      if (Number(dot.dataset.step) === active) dot.setAttribute('aria-current', 'step');
+      else dot.removeAttribute('aria-current');
+    });
+    if (pendingFocus && (reduce.matches || Math.abs(main.scrollTop - pendingFocus.position) < 2)) {
+      pendingFocus.target.focus({preventScroll:true});
       pendingFocus = null;
     }
-    root.dataset.progress = p.toFixed(3);
-    root.dataset.step = reveal < .01 ? 'hero' : String(activeIndex + 1);
+    root.dataset.step = String(active);
+    root.dataset.units = units.toFixed(3);
+    root.dataset.petProgress = petProgress.toFixed(3);
   }
 
   function schedule() {
     if (!queued) { queued = true; frame = requestAnimationFrame(update); }
   }
+  function go(index, focus = false) {
+    reducedStage = index;
+    const position = index === 0 ? 0 : start() + stops[index] * scene.clientHeight;
+    if (focus) pendingFocus = {target:index === 0 ? root : stages[index], position};
+    else pendingFocus = null;
+    main.scrollTo({top:reduce.matches ? 0 : position, behavior:reduce.matches ? 'auto' : 'smooth'});
+    schedule();
+  }
+  function toTop(event) { event.preventDefault(); go(0, true); }
+  function toStory(event) { event.preventDefault(); go(1, true); }
+  function toStep(event) { go(Number(event.currentTarget.dataset.step)); }
+  function preferenceChanged() {
+    reducedStage = Number(root.dataset.step || 0);
+    if (!reduce.matches) main.scrollTo({top:start() + stops[reducedStage] * scene.clientHeight, behavior:'instant'});
+    schedule();
+  }
   const observer = new MutationObserver(() => { if (!root.isConnected) cleanup(); });
   function cleanup() {
     main.removeEventListener('scroll', schedule);
     window.removeEventListener('resize', schedule);
-    reduce.removeEventListener('change', schedule);
-    links.forEach(link => link.removeEventListener('click', go));
-    back.removeEventListener('click', top);
-    brand?.removeEventListener('click', top);
-    cancelAnimationFrame(frame);
+    reduce.removeEventListener('change', preferenceChanged);
+    explore.removeEventListener('click', toStory);
+    back.removeEventListener('click', toTop);
+    brand.removeEventListener('click', toTop);
+    dots.forEach(dot => dot.removeEventListener('click', toStep));
     observer.disconnect();
+    cancelAnimationFrame(frame);
   }
   window.pawHomeCleanup = cleanup;
-  main.addEventListener('scroll', schedule, {passive: true});
+  main.addEventListener('scroll', schedule, {passive:true});
   window.addEventListener('resize', schedule);
-  reduce.addEventListener('change', schedule);
-  links.forEach(link => link.addEventListener('click', go));
-  back.addEventListener('click', top);
-  brand?.addEventListener('click', top);
-  observer.observe(main, {childList: true, subtree: true});
-  main.scrollTo({top: 0, behavior: 'instant'});
+  reduce.addEventListener('change', preferenceChanged);
+  explore.addEventListener('click', toStory);
+  back.addEventListener('click', toTop);
+  brand.addEventListener('click', toTop);
+  dots.forEach(dot => dot.addEventListener('click', toStep));
+  observer.observe(main, {childList:true, subtree:true});
+  main.scrollTo({top:0, behavior:'instant'});
   update();
 })();
