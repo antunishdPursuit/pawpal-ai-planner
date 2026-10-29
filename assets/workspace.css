@@ -93,3 +93,7 @@ body:has(.st-key-planner_header) [data-testid="stDialog"] button[aria-label="Clo
 .st-key-planner_header {justify-content:center;text-align:center;}
 .st-key-planner_header h1,.st-key-planner_header [data-testid="stCaptionContainer"] {text-align:center;}
 body:has(.st-key-planner_header) [data-testid="stDialog"] h2 {text-align:center;padding-inline:var(--paw-control)!important;}
+
+body:has(.st-key-planner_header) [data-testid="stDialog"] h2 {display:block;width:100%;}
+body:has(.st-key-planner_header) [data-testid="stDialog"] h2 > span {display:block;width:100%;}
+body:has(.st-key-planner_header) [data-testid="stDialog"] h2 [data-testid="stMarkdownContainer"] {width:100%;text-align:center;}

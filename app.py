@@ -10,7 +10,7 @@ from calendar_view import CalendarEntry, entries_for_day, filter_entries, day_co
 from pawpal_system import Scheduler
 from planner_clock import local_today, using_timezone
 from planner_storage import PlannerStore
-from task_editor import show_editor, open_editor, close_editor, cancel_editor, has_draft_content, map_search_url
+from task_editor import show_editor, open_editor, close_editor, cancel_editor, has_unsaved_draft, map_search_url
 from gemini_planner import is_configured, configuration
 from ui_components import task_summary, calendar_item, brand, planner_header, pet_identity, task_state
 from calendar_presentation import render_timeline
@@ -108,7 +108,7 @@ def user_page(store, owner, profiles):
                     else:
                         st.session_state.notice = "Timezone saved. Task times remain local wall times."
                         st.rerun()
-        if (has_draft_content(st.session_state.get("task_draft"))
+        if (has_unsaved_draft()
                 or st.session_state.get("conversation") or st.session_state.get("pending_request")):
             st.warning("Selecting or creating another user discards your unsaved draft and conversation.")
         if profiles:

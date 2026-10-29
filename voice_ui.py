@@ -130,7 +130,6 @@ def render_voice(store, owner, profiles, replace_allowed):
                     raise PlannerError("Keep planning or use Manual.")
                 st.session_state.task_draft = result.draft
                 st.session_state.preview_blocked = False
-                st.session_state.conversation_requested = False
             else:
                 users = [item["text"] for item in safe if item["role"] == "user"]
                 if users:
@@ -139,7 +138,6 @@ def render_voice(store, owner, profiles, replace_allowed):
                     st.session_state.pending_request = (existing.strip() + " " + users[-1]).strip()[:2000]
                     st.session_state.composer_count = count + 1
                     st.session_state.preview_blocked = True
-                    st.session_state.conversation_requested = True
             st.rerun()
     except (PlannerError, ValueError, TypeError, sqlite3.Error, OSError) as error:
         st.session_state.pop("voice_credential", None)

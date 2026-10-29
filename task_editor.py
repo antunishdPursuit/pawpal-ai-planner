@@ -13,6 +13,8 @@ from voice_ui import render_voice
 from app_theme import favicon
 from voice_telemetry import record_voice_event
 
+DRAFT_SLOTS = {"Conversation": "conversation_draft", "Manual": "manual_draft"}
+
 REPEATS = {"NONE": "Does not repeat", "DAILY": "Daily", "WEEKLY": "Weekly", "CUSTOM": "Custom"}
 
 
@@ -33,7 +35,7 @@ def open_editor(pet_id, day=None, mode="Manual"):
     st.session_state.entry_mode = mode
     st.session_state.editor_day = day
     st.session_state.editor_pet_id = pet_id
-    st.session_state.conversation_requested = mode == "Conversation"
+    activate_entry_mode(mode)
     draft = st.session_state.get("task_draft")
     if not has_draft_content(draft):
         st.session_state.pop("task_draft", None)
@@ -44,11 +46,13 @@ def open_editor(pet_id, day=None, mode="Manual"):
 def cancel_editor():
     st.session_state.editor_open = False
     st.session_state.pop("task_draft", None)
+    for slot in DRAFT_SLOTS.values():
+        st.session_state.pop(slot, None)
+    st.session_state.pop("draft_mode", None)
     st.session_state.pop("conversation", None)
     st.session_state.pop("planner_error", None)
     st.session_state.pop("composer_count", None)
     st.session_state.pop("preview_blocked", None)
-    st.session_state.pop("conversation_requested", None)
     st.session_state.pop("editor_day", None)
     st.session_state.pop("editor_pet_id", None)
     st.session_state.pop("pending_request", None)
@@ -59,8 +63,8 @@ def cancel_editor():
     st.session_state.pop("voice_attempt_id", None)
 
 
-def close_editor():
-    """Close without saving; snapshot the latest received widget edits first."""
+def snapshot_current_draft():
+    """Read current native-widget values before hiding or dismissing their mode."""
     draft = st.session_state.get("task_draft")
     if draft is not None:
         prefix = draft.request_id
@@ -76,6 +80,53 @@ def close_editor():
             location=state.get(f"{prefix}_location", draft.location),
             description=state.get(f"{prefix}_description", draft.description),
         )
+    return st.session_state.get("task_draft")
+
+
+def remember_active_draft():
+    slot = DRAFT_SLOTS.get(st.session_state.get("draft_mode"))
+    if slot:
+        draft = st.session_state.get("task_draft")
+        if draft is None:
+            st.session_state.pop(slot, None)
+        else:
+            st.session_state[slot] = draft
+
+
+def activate_entry_mode(mode):
+    """Each mode owns its draft; task_draft is only the active editor alias."""
+    previous = st.session_state.get("draft_mode")
+    if previous == mode:
+        return
+    if previous in DRAFT_SLOTS:
+        snapshot_current_draft()
+        remember_active_draft()
+    elif st.session_state.get("task_draft") is not None:
+        # An unclassified older draft must not appear as an AI-generated preview.
+        st.session_state.manual_draft = st.session_state.task_draft
+    incoming = st.session_state.get(DRAFT_SLOTS[mode])
+    if incoming is None:
+        st.session_state.pop("task_draft", None)
+    else:
+        st.session_state.task_draft = incoming
+    st.session_state.draft_mode = mode
+
+
+def has_unsaved_draft():
+    return any(has_draft_content(st.session_state.get(key))
+               for key in ("task_draft", *DRAFT_SLOTS.values()))
+
+
+def restore_previous_preview():
+    st.session_state.pop("preview_blocked", None)
+    st.session_state.pop("planner_error", None)
+    st.session_state.pop("voice_error", None)
+
+
+def close_editor():
+    """Close without saving, preserving each mode's temporary work."""
+    snapshot_current_draft()
+    remember_active_draft()
     attempt = st.session_state.pop("voice_attempt_id", None)
     if attempt:
         record_voice_event("dialog_closed", attempt_id=attempt)
@@ -88,13 +139,14 @@ def close_editor():
 
 
 def start_over():
+    mode = st.session_state.get("entry_mode", "Manual")
     day = st.session_state.get("editor_day")
     pet_id = st.session_state.get("editor_pet_id")
     cancel_editor()
     st.session_state.editor_day = day
     st.session_state.editor_pet_id = pet_id
     st.session_state.editor_open = True
-    st.session_state.entry_mode = "Manual"
+    st.session_state.entry_mode = mode
 
 
 def conversation_input(store, owner, profiles):
@@ -135,7 +187,6 @@ def conversation_input(store, owner, profiles):
                 st.session_state.composer_count = count + 1
                 st.session_state.pop("pending_request", None)
                 st.session_state.preview_blocked = result.draft is None
-                st.session_state.conversation_requested = result.draft is None
                 if result.draft is not None:
                     st.session_state.task_draft = result.draft
                 st.rerun()
@@ -144,11 +195,14 @@ def conversation_input(store, owner, profiles):
 
 
 def entry_mode_changed():
+    attempt = st.session_state.pop("voice_attempt_id", None)
+    if attempt:
+        record_voice_event("entry_mode_changed", attempt_id=attempt)
     st.session_state.pop("voice_credential", None)
     key = f"request_{st.session_state.get('composer_count', 0)}"
     if key in st.session_state:
         st.session_state.pending_request = st.session_state[key]
-    st.session_state.conversation_requested = st.session_state.get("entry_mode") == "Conversation"
+    activate_entry_mode(st.session_state.get("entry_mode", "Manual"))
 
 
 @st.cache_resource
@@ -174,16 +228,17 @@ def show_editor(store, owner):
         mode = st.radio("Entry method", ["Conversation", "Manual"], horizontal=True,
                         index=None if "entry_mode" in st.session_state else 1,
                         key="entry_mode", on_change=entry_mode_changed, label_visibility="collapsed")
+        activate_entry_mode(mode)
         if mode == "Conversation":
-            with st.expander("Request and response", expanded=st.session_state.get("conversation_requested", False) or st.session_state.get("task_draft") is None or st.session_state.get("preview_blocked", False)):
-                conversation_input(store, owner, store.list_profiles())
+            conversation_input(store, owner, store.list_profiles())
         elif st.session_state.get("task_draft") is None:
             st.session_state.task_draft = TaskDraft(st.session_state.get("editor_pet_id") or owner.pets[0].pet_id, "",
                                                     st.session_state.get("editor_day") or local_today())
         draft = st.session_state.get("task_draft")
         if draft is None or (mode == "Conversation" and st.session_state.get("preview_blocked")):
             if draft is not None:
-                st.info("Your previous draft is preserved. Continue the conversation or choose Manual to review it.")
+                st.info("Your previous preview is preserved.")
+                st.button("Review previous preview", on_click=restore_previous_preview)
             return
         if owner.find_pet(draft.pet_id) is None:
             st.error("This draft belongs to another user. Start over.")

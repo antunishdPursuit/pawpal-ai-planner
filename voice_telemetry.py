@@ -12,7 +12,7 @@ from voice_status import connection_diagnostic
 
 MAX_BYTES = 1024 * 1024
 BACKUPS = 3
-EVENTS = {"diagnostics_enabled", "credential_requested", "credential_prepared", "credential_failed", "live_ended", "dialog_closed"}
+EVENTS = {"diagnostics_enabled", "credential_requested", "credential_prepared", "credential_failed", "live_ended", "dialog_closed", "entry_mode_changed"}
 _lock = RLock()
 
 
