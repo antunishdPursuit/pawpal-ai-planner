@@ -8,7 +8,7 @@
 .st-key-homepage_closing {align-items:center;position:fixed;z-index:8;visibility:hidden;pointer-events:none;}
 .st-key-homepage_closing button {pointer-events:auto;font-family:system-ui,sans-serif!important;font-size:var(--paw-body)!important;min-height:48px!important;padding:var(--paw-space-3) var(--paw-space-4)!important;}
 .st-key-homepage_closing button p {font-size:var(--paw-body)!important;line-height:24px!important;}
-.paw-landing {--paw-home-closing-title:clamp(56px,5vw,80px);--paw-home-closing-support:clamp(24px,2vw,30px);--paw-home-closing-width:900px;--paw-scene-height:100svh;--paw-scroll-travel:340svh;--paw-home-footer-height:calc(2 * var(--paw-space-8));font-family:system-ui,sans-serif;color:var(--paw-text);}
+.paw-landing {--paw-home-closing-title:clamp(56px,5vw,80px);--paw-home-closing-support:clamp(24px,2vw,30px);--paw-home-closing-width:900px;--paw-home-closing-surface:color-mix(in srgb,var(--paw-surface) 65%,transparent);--paw-scene-height:100svh;--paw-scroll-travel:340svh;--paw-home-footer-height:calc(2 * var(--paw-space-8));font-family:system-ui,sans-serif;color:var(--paw-text);}
 .paw-home-travel {height:calc(var(--paw-scene-height) + var(--paw-scroll-travel));}
 .paw-home-scene {height:var(--paw-scene-height);position:sticky;top:0;overflow:clip;background:var(--paw-page);}
 .paw-home-room {position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;}
@@ -54,7 +54,7 @@
 .paw-calendar-row strong {display:block;font-size:var(--paw-body);font-weight:600;}
 .paw-calendar-row small {display:block;font-size:var(--paw-small);color:var(--paw-muted);}
 .paw-calendar-selected {padding:var(--paw-space-3);margin:var(--paw-space-1) calc(-1 * var(--paw-space-3));background:var(--paw-selected);border:0;border-radius:var(--paw-space-2);}
-.paw-home-stage.paw-home-copy {left:0;right:0;top:40%;width:min(var(--paw-home-closing-width),calc(100% - 64px));margin-inline:auto;text-align:center;}
+.paw-home-stage.paw-home-copy {left:0;right:0;top:40%;width:min(var(--paw-home-closing-width),calc(100% - 64px));margin-inline:auto;text-align:center;padding:var(--paw-space-8);background:var(--paw-home-closing-surface);border:0;border-radius:var(--paw-radius);}
 .paw-home-copy h1 {font-size:var(--paw-home-closing-title)!important;line-height:1.08!important;letter-spacing:-.03em;font-weight:600;margin:0 0 var(--paw-space-4);padding:0!important;}
 .paw-home-copy p {font-size:var(--paw-home-closing-support);line-height:1.5;margin:0 auto var(--paw-space-6);max-width:640px;}
 .paw-home-planner-slot {height:48px;}
