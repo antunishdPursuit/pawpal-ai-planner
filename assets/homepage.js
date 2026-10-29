@@ -42,7 +42,8 @@
       smooth((u - 2.8) / .15),
     ];
     // Original pet image bytes, pose, scale and Y stay fixed. Only X changes.
-    const petProgress = reduce.matches ? [0, .5, 1, 1][active] : smooth((u - .8) / 1);
+    // Begin during late Tell; finish the same sideways exit before See.
+    const petProgress = reduce.matches ? [0, .5, 1, 1][active] : smooth((u - .55) / 1.25);
     dog.style.transform = `translateX(${(scene.clientWidth - dog.offsetLeft + 8) * petProgress}px)`;
     cat.style.transform = `translateX(${-(cat.offsetLeft + cat.offsetWidth + 8) * petProgress}px)`;
     stages.forEach((stage, i) => {
