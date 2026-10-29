@@ -196,3 +196,11 @@ This project reflects how I approach AI engineering: start with the owner's task
 ## Sources
 
 [AI110 Applied AI System instructions](https://courses.codepath.org/courses/ai110/unit/8#!projects), [Google Gen AI Python SDK](https://googleapis.github.io/python-genai/), [Gemini structured output](https://ai.google.dev/gemini-api/docs/generate-content/structured-output), [Gemini 3.8 Flash](https://ai.google.dev/gemini-api/docs/models/gemini-3.8-flash), [Streamlit configuration](https://docs.streamlit.io/develop/api-reference/configuration/config.toml), [Gemini Live](https://ai.google.dev/gemini-api/docs/live-api), [Live ephemeral tokens](https://ai.google.dev/gemini-api/docs/live-api/ephemeral-tokens), [Streamlit components v2](https://docs.streamlit.io/develop/concepts/custom-components/components-v2).
+
+
+## Planner visual assets
+
+The planner bundles [DM Sans from Google Fonts](https://github.com/google/fonts/tree/main/ofl/dmsans)
+under the [SIL Open Font License](assets/fonts/OFL.txt); no font service is contacted
+at runtime. Its static room header uses a separate local image. The homepage keeps
+its original room, pet layers, typography, and scroll animation.

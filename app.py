@@ -12,11 +12,11 @@ from planner_clock import local_today, using_timezone
 from planner_storage import PlannerStore
 from task_editor import show_editor, open_editor, cancel_editor, has_draft_content, map_search_url
 from gemini_planner import is_configured, configuration
-from ui_components import task_summary, calendar_item, brand
+from ui_components import task_summary, calendar_item, brand, planner_header, pet_identity, task_state
 from calendar_presentation import render_timeline
 from homepage import show_home
 
-st.set_page_config(page_title="PawPal AI Planner", page_icon=favicon(), layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="PawPal AI Planner", page_icon=favicon(), layout="wide", initial_sidebar_state="auto")
 apply_theme()
 
 
@@ -91,7 +91,6 @@ def profile_form(store):
 
 
 def user_page(store, owner, profiles):
-    st.title("Change user" if owner else "Choose user" if profiles else "Add user")
     with st.container(key="profile_surface"):
         if owner:
             st.caption("CURRENT USER")
@@ -115,10 +114,11 @@ def user_page(store, owner, profiles):
         if profiles:
             others = [p for p in profiles if owner is None or p.owner_id != owner.owner_id]
             if others:
-                selected = st.selectbox("Saved users", [p.owner_id for p in others],
+                choice, use = st.columns([1.6, 1], vertical_alignment="bottom")
+                selected = choice.selectbox("Saved users", [p.owner_id for p in others],
                                        format_func=lambda value: next(p.name for p in others if p.owner_id == value),
                                        key="user_choice")
-                if st.button("Use this user", type="primary"):
+                if use.button("Use this user", type="primary", use_container_width=True):
                     activate_profile(selected)
                     st.rerun()
         with st.expander("Add a new local user", expanded=not profiles):
@@ -178,24 +178,21 @@ def sidebar(owner, profiles):
 
 
 def pets_page(store, owner):
-    with st.container(horizontal=True, vertical_alignment="center", key="pets_heading"):
-        st.title("Your pets", width="content")
-        if owner.pets:
-            st.button("Add a pet", key="add_pet", on_click=show_pet_dialog, type="primary")
     if not owner.pets:
         with st.container(key="pets_surface"):
             st.subheader("Meet your first pet")
             st.write("Start with their name, species and age.")
             pet_form(store)
     else:
-        columns = st.columns(min(3, len(owner.pets)))
-        for i, pet in enumerate(owner.pets):
-            with columns[i % len(columns)]:
-                with st.container(border=True):
-                    st.subheader(pet.name)
-                    st.caption(f"{pet.species.capitalize()} / Age {pet.age}")
-                    st.button(f"View {pet.name}'s calendar", key=f"pet_calendar_{pet.pet_id}",
-                              on_click=pet_calendar, args=(pet.pet_id,))
+        with st.container(horizontal=True, key="pets_workspace"):
+            with st.container(horizontal=True, key="pet_cards"):
+                for pet in owner.pets:
+                    with st.container(width=340, key=f"pet_card_{pet.pet_id}"):
+                        pet_identity(pet)
+                        st.button(f"View {pet.name}'s calendar", key=f"pet_calendar_{pet.pet_id}", use_container_width=True,
+                                  on_click=pet_calendar, args=(pet.pet_id,))
+            with st.container(width="content", key="pets_heading"):
+                st.button("Add a pet", key="add_pet", on_click=show_pet_dialog, type="primary")
 
 
 def task_card(store, owner, entry, prefix, viewer_id=None):
@@ -205,10 +202,12 @@ def task_card(store, owner, entry, prefix, viewer_id=None):
         at_value = entry.display_time or task.time_of_day
         at = at_value.strftime("%I:%M %p").lstrip("0") if at_value else "Anytime"
         state = "Planned repeat" if entry.projected else entry.status.capitalize()
-        clock, content, action = st.columns([1.1, 5, 1.5], vertical_alignment="center")
+        clock, content, status, action = st.columns([1.1, 3.5, 1.2, 1.8], vertical_alignment="top")
         clock.markdown(f'<div class="paw-time">{at}</div>', unsafe_allow_html=True)
         with content:
-            task_summary(task, pet, state, entry.owner_name)
+            task_summary(task, pet, entry.owner_name)
+        with status:
+            task_state(state)
         if entry.owner_id == viewer_id and not entry.projected and entry.status != "done" and (task.due_date is None or task.due_date <= local_today()):
             if action.button("Mark done", key=f"done_{prefix}_{task.task_id}", use_container_width=True):
                 try:
@@ -218,7 +217,7 @@ def task_card(store, owner, entry, prefix, viewer_id=None):
                 else:
                     st.session_state.notice = f"Done. Next occurrence: {next_task.due_date:%B %d}." if next_task else "Task completed."
                     st.rerun()
-        with st.expander("Task details"):
+        with action.expander("Task details"):
             if task.description:
                 st.text(task.description)
             if task.due_date:
@@ -236,8 +235,6 @@ def task_card(store, owner, entry, prefix, viewer_id=None):
 
 
 def calendar_page(store, owner, owners):
-    st.title("Community calendar")
-    st.caption(local_today().strftime("%A, %B %d") + " / " + owner.timezone)
     calendar_workspace(store, owner, owners)
 
 
@@ -351,7 +348,9 @@ def main():
     if page == "Home":
         show_home(open_planner)
         return
-    st.button("Back to Home", on_click=navigate, args=("Home",), key="back_to_home")
+    title = ("Change user" if owner else "Choose user" if profiles else "Add user") if page == "User" else "Your pets" if page == "Pets" else "Community calendar"
+    subtitle = local_today().strftime("%A, %B %d") + " / " + owner.timezone if page == "Calendar" else ""
+    planner_header(title, lambda: navigate("Home"), subtitle)
     if page == "User":
         user_page(root_store, owner, profiles)
         return
