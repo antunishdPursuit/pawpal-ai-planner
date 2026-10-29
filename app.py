@@ -346,7 +346,7 @@ def main():
     except (sqlite3.Error, OSError):
         st.error("Local storage is unavailable. Check folder permissions or PAWPAL_DB_PATH, then reload.")
         return
-    page = sidebar(owner, profiles)
+    page = st.session_state.page if st.session_state.page == "Home" else sidebar(owner, profiles)
     if "notice" in st.session_state:
         st.success(st.session_state.pop("notice"))
     if page == "Home":
