@@ -39,7 +39,6 @@
 .paw-review-speaker {display:flex;align-items:center;gap:var(--paw-space-2);font-size:var(--paw-body);line-height:24px;margin-bottom:var(--paw-space-2);}
 .paw-review-speaker img {width:24px;height:24px;}
 .paw-review-speaker strong {font-weight:600;}
-.paw-review-speaker span {margin-left:auto;padding:var(--paw-space-1) var(--paw-space-2);font-size:var(--paw-small);line-height:20px;color:var(--paw-primary);background:var(--paw-selected);border-radius:var(--paw-space-2);}
 .paw-home-review h3 {font-size:var(--paw-title)!important;line-height:40px;margin:0 0 var(--paw-space-3);font-weight:600;}
 .paw-landing dl.paw-review-details {padding:0!important;}
 .paw-review-details {display:grid;grid-template-columns:1fr 1fr;gap:var(--paw-space-3) var(--paw-space-6);margin:0;}
