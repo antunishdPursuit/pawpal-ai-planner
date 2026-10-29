@@ -96,3 +96,8 @@ test('connection milestones stay local until the end and contain no speech or cr
  assert.equal(d.output_chunks,1);assert.equal(d.input_chunks,0);
  assert.doesNotMatch(JSON.stringify(d),/PRIVATE|test-only|fake-session/);
 });
+
+test('closing an active dialog releases the microphone and socket without saving',async()=>{
+ const p=await connected();p.cleanup();
+ assert.equal(p.tracksStopped,1);assert.equal(p.sockets[0].readyState,3);assert.equal(p.events.length,0);
+});

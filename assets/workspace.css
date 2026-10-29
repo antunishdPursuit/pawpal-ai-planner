@@ -86,6 +86,8 @@ body:has(.st-key-planner_header) [data-testid="stDialog"] h2 {font-size:32px!imp
 .st-key-task_editor [data-testid="stChatMessage"] [data-testid="stText"] span {font:inherit;color:inherit!important;}
 .st-key-task_editor [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) [data-testid="stText"] span {color:var(--paw-surface)!important;}
 
-.st-key-task_editor .st-key-keep_composer {width:100%!important;display:flex;justify-content:center;}
 
-.st-key-keep_composer > [data-testid="stButton"],.st-key-keep_composer button {width:fit-content!important;}
+
+body:has(.st-key-planner_header) [data-testid="stDialog"] button[aria-label="Close"] {min-width:var(--paw-control);min-height:var(--paw-control);}
+
+.st-key-dialog_close_guard,[data-testid="stLayoutWrapper"]:has(> .st-key-dialog_close_guard) {display:none;}

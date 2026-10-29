@@ -10,7 +10,7 @@ from calendar_view import CalendarEntry, entries_for_day, filter_entries, day_co
 from pawpal_system import Scheduler
 from planner_clock import local_today, using_timezone
 from planner_storage import PlannerStore
-from task_editor import show_editor, open_editor, cancel_editor, has_draft_content, map_search_url
+from task_editor import show_editor, open_editor, close_editor, cancel_editor, has_draft_content, map_search_url
 from gemini_planner import is_configured, configuration
 from ui_components import task_summary, calendar_item, brand, planner_header, pet_identity, task_state
 from calendar_presentation import render_timeline
@@ -39,7 +39,7 @@ def remember_date():
     st.session_state.calendar_date = st.session_state.selected_day
 
 
-@st.dialog("Plan a care task", width="medium", dismissible=False)
+@st.dialog("Plan a care task", width="medium", dismissible=True, on_dismiss=close_editor)
 def task_dialog(store, owner):
     with using_timezone(owner.timezone):
         show_editor(store, owner)

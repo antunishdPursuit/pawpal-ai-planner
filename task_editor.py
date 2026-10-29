@@ -11,6 +11,7 @@ from task_contract import TaskDraft
 from gemini_planner import GeminiPlanner, PlannerError, is_configured
 from voice_ui import render_voice
 from app_theme import favicon
+from voice_telemetry import record_voice_event
 
 REPEATS = {"NONE": "Does not repeat", "DAILY": "Daily", "WEEKLY": "Weekly", "CUSTOM": "Custom"}
 
@@ -58,7 +59,26 @@ def cancel_editor():
     st.session_state.pop("voice_attempt_id", None)
 
 
-def keep_draft():
+def close_editor():
+    """Close without saving; snapshot the latest received widget edits first."""
+    draft = st.session_state.get("task_draft")
+    if draft is not None:
+        prefix = draft.request_id
+        state = st.session_state
+        anytime = state.get(f"{prefix}_anytime", draft.time_of_day is None)
+        st.session_state.task_draft = replace(
+            draft, title=state.get(f"{prefix}_title", draft.title),
+            pet_id=state.get(f"{prefix}_pet", draft.pet_id),
+            due_date=state.get(f"{prefix}_date", draft.due_date),
+            repeat=state.get(f"{prefix}_repeat", draft.repeat),
+            interval_days=state.get(f"{prefix}_interval", draft.interval_days),
+            time_of_day=None if anytime else state.get(f"{prefix}_time", draft.time_of_day),
+            location=state.get(f"{prefix}_location", draft.location),
+            description=state.get(f"{prefix}_description", draft.description),
+        )
+    attempt = st.session_state.pop("voice_attempt_id", None)
+    if attempt:
+        record_voice_event("dialog_closed", attempt_id=attempt)
     st.session_state.pop("voice_credential", None)
     count = st.session_state.get("composer_count", 0)
     key = f"request_{count}"
@@ -131,7 +151,25 @@ def entry_mode_changed():
     st.session_state.conversation_requested = st.session_state.get("entry_mode") == "Conversation"
 
 
+@st.cache_resource
+def dialog_close_guard():
+    # Commit a focused text widget before native Escape dismissal unmounts it.
+    # No state callbacks or reruns are emitted by this component.
+    return st.components.v2.component("pawpal_dialog_close_guard", html="", js="""
+export default function() {
+ const flush=event=>{
+  const focused=document.activeElement;
+  if(event.key==="Escape" && focused?.closest(".st-key-task_editor") &&
+     focused.closest('[data-testid="stTextInput"],[data-testid="stTextArea"]')) focused.blur();
+ };
+ document.addEventListener("keydown",flush,true);
+ return()=>document.removeEventListener("keydown",flush,true);
+}
+""")
+
+
 def show_editor(store, owner):
+    dialog_close_guard()(key="dialog_close_guard")
     with st.container(key="task_editor"):
         mode = st.radio("Entry method", ["Conversation", "Manual"], horizontal=True,
                         index=None if "entry_mode" in st.session_state else 1,
@@ -146,16 +184,10 @@ def show_editor(store, owner):
         if draft is None or (mode == "Conversation" and st.session_state.get("preview_blocked")):
             if draft is not None:
                 st.info("Your previous draft is preserved. Continue the conversation or choose Manual to review it.")
-            if st.button("Keep draft", key="keep_composer"):
-                keep_draft()
-                st.rerun()
             return
         if owner.find_pet(draft.pet_id) is None:
             st.error("This draft belongs to another user. Start over.")
             st.button("Start over", on_click=start_over)
-            if st.button("Keep draft", key="keep_composer"):
-                keep_draft()
-                st.rerun()
             return
         review_heading = st.container(horizontal=True, vertical_alignment="center", key="review_heading")
         prefix = draft.request_id
@@ -194,11 +226,7 @@ def show_editor(store, owner):
                                        key=f"{prefix}_conflict_{due}_{at}_{pet_id}_{repeat}_{interval}")
         st.caption(f"{due:%A, %B %d, %Y} | {owner.timezone}" if due else "Choose a date.")
         with st.container(key="confirm_actions"):
-            left, right = st.columns(2)
-            if left.button("Keep draft", use_container_width=True):
-                keep_draft()
-                st.rerun()
-            if right.button("Confirm and save", type="primary", use_container_width=True, disabled=due is None or (not anytime and at is None)):
+            if st.button("Confirm and save", type="primary", use_container_width=True, disabled=due is None or (not anytime and at is None)):
                 try:
                     saved = store.create_task(current, allow_conflicts=acknowledged)
                 except (ValueError, sqlite3.Error, OSError) as error:
