@@ -21,7 +21,6 @@
 .paw-home-brand small {font-size:9px;letter-spacing:.15em;}
 .paw-home-stage {position:absolute;left:28%;top:18%;z-index:5;width:min(480px,38vw);}
 .paw-home-stage h2 {font-size:var(--paw-title)!important;line-height:40px;margin:0 0 var(--paw-space-4);font-weight:600;}
-.paw-landing .paw-example-label {font-size:var(--paw-small);line-height:20px;color:var(--paw-muted);margin:0 0 var(--paw-space-3);}
 .paw-landing ol.paw-chat {padding:0!important;}
 .paw-home-stage[aria-hidden="true"] {visibility:hidden;opacity:0;}
 .paw-chat {display:flex;flex-direction:column;gap:var(--paw-space-3);padding:0;margin:0;list-style:none;}
@@ -48,7 +47,6 @@
 .paw-review-details dt {font-size:var(--paw-small);line-height:20px;color:var(--paw-muted);margin:0 0 var(--paw-space-1);}
 .paw-review-details dd {font-size:var(--paw-heading);line-height:26px;margin:0;}
 .paw-review-place {grid-column:1/-1;}
-.paw-home-review .paw-example-label,.paw-home-calendar .paw-example-label {margin:var(--paw-space-4) 0 0;}
 .paw-home-calendar h3 {font-size:24px!important;line-height:32px;margin:0 0 var(--paw-space-4);font-weight:600;}
 .paw-calendar-row {display:grid;grid-template-columns:64px 1fr;gap:var(--paw-space-4);align-items:start;padding:var(--paw-space-3) 0;border-top:1px solid var(--paw-border);font-size:var(--paw-small);line-height:22px;}
 .paw-calendar-row strong {display:block;font-size:var(--paw-body);font-weight:600;}
