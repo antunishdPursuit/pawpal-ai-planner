@@ -132,7 +132,7 @@ def user_page(store, owner, profiles):
 
 
 def pet_form(store):
-    with st.form("pet_form"):
+    with st.form("pet_form", border=False):
         name = st.text_input("Pet name", max_chars=80, key="pet_name")
         species = st.selectbox("Species", ["dog", "cat", "other"], key="pet_species")
         age = st.number_input("Age", min_value=0, max_value=30, value=2, step=1, key="pet_age")
@@ -349,7 +349,10 @@ def main():
         show_home(open_planner)
         return
     title = ("Change user" if owner else "Choose user" if profiles else "Add user") if page == "User" else "Your pets" if page == "Pets" else "Community calendar"
-    subtitle = local_today().strftime("%A, %B %d") + " / " + owner.timezone if page == "Calendar" else ""
+    subtitle = ""
+    if page == "Calendar":
+        with using_timezone(owner.timezone):
+            subtitle = local_today().strftime("%A, %B %d") + " / " + owner.timezone
     planner_header(title, lambda: navigate("Home"), subtitle)
     if page == "User":
         user_page(root_store, owner, profiles)

@@ -1,5 +1,6 @@
 .voice-controls {display:flex; flex-wrap:wrap; gap:var(--paw-space-2);}
-button {font:inherit; color:var(--paw-primary); background:var(--paw-surface); border:1px solid var(--paw-border); border-radius:var(--paw-radius); min-height:var(--paw-control); padding:var(--paw-space-2) var(--paw-space-4); display:inline-flex; align-items:center; gap:var(--paw-space-2); cursor:pointer;}
+button {font:inherit; color:var(--paw-primary); background:var(--paw-muted-surface); border:1px solid var(--paw-border); border-radius:var(--paw-radius); min-height:var(--paw-control); padding:var(--paw-space-2) var(--paw-space-4); display:inline-flex; align-items:center; gap:var(--paw-space-2); cursor:pointer;}
+.voice-controls > button {flex:1;justify-content:center;}
 button[hidden] {display:none;} button:disabled {opacity:.5; cursor:default;}
 button:focus-visible {outline:3px solid var(--paw-primary); outline-offset:3px;}
 button[aria-pressed="true"],#review {background:var(--paw-primary);color:var(--paw-rail-text);}
