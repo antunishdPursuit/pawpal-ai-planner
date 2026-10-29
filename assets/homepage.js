@@ -13,6 +13,7 @@
   const dots = [...progress.querySelectorAll('button')];
   const explore = document.getElementById('paw-explore');
   const back = document.getElementById('paw-back-top');
+  const footerBack = document.getElementById('paw-footer-top');
   const brand = root.querySelector('.paw-home-brand');
   const reduce = matchMedia('(prefers-reduced-motion: reduce)');
   const stops = [0, .8, 1.65, 2.5];
@@ -32,13 +33,17 @@
       smooth((units - 1.15) / .15) * (1 - smooth((units - 2.15) / .15)),
       smooth((units - 2.3) / .15),
     ];
-    // Reuse the original images at a constant scale. Only their X position changes.
+    // Reuse the original images at a constant scale. Only their Y position changes.
     // Tell is complete before departure starts; both full image boxes exit before See.
     const petProgress = smooth((units - 1.15) / 1);
-    const dogExit = scene.clientWidth - dog.offsetLeft + 8;
-    const catExit = cat.offsetLeft + cat.offsetWidth + 8;
-    dog.style.transform = `translateX(${dogExit * petProgress}px)`;
-    cat.style.transform = `translateX(${-catExit * petProgress}px)`;
+    const dogExit = scene.clientHeight - dog.offsetTop + 8;
+    const catExit = scene.clientHeight - cat.offsetTop + 8;
+    dog.style.transform = `translateY(${dogExit * petProgress}px)`;
+    cat.style.transform = `translateY(${catExit * petProgress}px)`;
+    root.dataset.footer = String(travel.getBoundingClientRect().bottom < main.getBoundingClientRect().bottom - 1);
+    // Keep the final wall card readable while the room releases into the footer.
+    const footerOffset = Math.max(0, main.getBoundingClientRect().top - scene.getBoundingClientRect().top);
+    root.style.setProperty('--paw-footer-offset', `${footerOffset}px`);
 
     stages.forEach((stage, index) => {
       stage.style.opacity = String(alpha[index]);
@@ -88,6 +93,7 @@
     reduce.removeEventListener('change', preferenceChanged);
     explore.removeEventListener('click', toStory);
     back.removeEventListener('click', toTop);
+    footerBack.removeEventListener('click', toTop);
     brand.removeEventListener('click', toTop);
     dots.forEach(dot => dot.removeEventListener('click', toStep));
     observer.disconnect();
@@ -99,6 +105,7 @@
   reduce.addEventListener('change', preferenceChanged);
   explore.addEventListener('click', toStory);
   back.addEventListener('click', toTop);
+  footerBack.addEventListener('click', toTop);
   brand.addEventListener('click', toTop);
   dots.forEach(dot => dot.addEventListener('click', toStep));
   observer.observe(main, {childList:true, subtree:true});
