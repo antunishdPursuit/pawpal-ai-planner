@@ -18,7 +18,6 @@ body:has(.st-key-planner_header) :is(h1,h2,h3,p,a,label,input,textarea,select,bu
 .stApp:has(.st-key-planner_header) [data-testid="stHeader"] {background:transparent;height:0;pointer-events:none;}
 .stApp:has(.st-key-planner_header) [data-testid="stHeader"] button {pointer-events:auto;}
 .st-key-planner_header {position:relative;max-width:none!important;width:calc(100% + 2 * var(--paw-workspace-inset))!important;margin-left:calc(-1 * var(--paw-workspace-inset));min-height:var(--paw-workspace-header);padding:calc(2 * var(--paw-space-6)) var(--paw-header-inset);background-image:url('__PLANNER_ROOM__');background-size:cover;background-position:center 35%;gap:var(--paw-space-4);}
-.st-key-planner_header button {background:var(--paw-surface);border:1px solid var(--paw-border);padding-inline:var(--paw-space-4);}
 .st-key-planner_header h1 {font-size:var(--paw-workspace-title)!important;line-height:var(--paw-workspace-title-line)!important;font-weight:600;letter-spacing:-.025em;padding:0!important;margin:0!important;}
 .st-key-planner_header [data-testid="stCaptionContainer"] p {color:var(--paw-text);}
 .stApp:has(.st-key-planner_header) :is(.st-key-calendar_surface,.st-key-profile_surface,.st-key-pets_surface) {background:var(--paw-surface);border:1px solid var(--paw-border);border-radius:var(--paw-radius);padding:var(--paw-space-6);box-shadow:var(--paw-workspace-shadow);}
@@ -44,7 +43,6 @@ body:has(.st-key-planner_header) :is(h1,h2,h3,p,a,label,input,textarea,select,bu
  .st-key-planner_header {padding-top:var(--paw-space-8);--paw-header-veil:color-mix(in srgb,var(--paw-page) 92%,transparent);--paw-header-veil-edge:color-mix(in srgb,var(--paw-page) 60%,transparent);}
  .st-key-planner_header::before {content:"";position:absolute;inset:0;background:linear-gradient(90deg,var(--paw-header-veil) 0%,var(--paw-header-veil) 65%,var(--paw-header-veil-edge));pointer-events:none;}
  .st-key-planner_header > [data-testid="stLayoutWrapper"] {position:relative;}
- .st-key-planner_header .st-key-back_to_home {margin-left:var(--paw-space-4);}
 }
 
 .st-key-pets_workspace {align-items:flex-start;gap:var(--paw-space-6);}
@@ -91,3 +89,7 @@ body:has(.st-key-planner_header) [data-testid="stDialog"] h2 {font-size:32px!imp
 body:has(.st-key-planner_header) [data-testid="stDialog"] button[aria-label="Close"] {min-width:var(--paw-control);min-height:var(--paw-control);}
 
 .st-key-dialog_close_guard,[data-testid="stLayoutWrapper"]:has(> .st-key-dialog_close_guard) {display:none;}
+
+.st-key-planner_header {justify-content:center;text-align:center;}
+.st-key-planner_header h1,.st-key-planner_header [data-testid="stCaptionContainer"] {text-align:center;}
+body:has(.st-key-planner_header) [data-testid="stDialog"] h2 {text-align:center;padding-inline:var(--paw-control)!important;}

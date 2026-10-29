@@ -353,7 +353,7 @@ def main():
     if page == "Calendar":
         with using_timezone(owner.timezone):
             subtitle = local_today().strftime("%A, %B %d") + " / " + owner.timezone
-    planner_header(title, lambda: navigate("Home"), subtitle)
+    planner_header(title, subtitle)
     if page == "User":
         user_page(root_store, owner, profiles)
         return

@@ -49,10 +49,9 @@ def calendar_item(entry, pet):
     )
 
 
-def planner_header(title, on_home, subtitle=""):
+def planner_header(title, subtitle=""):
     """Static planner header; native navigation and headings stay accessible."""
     with st.container(key="planner_header"):
-        st.button("Back to Home", on_click=on_home, key="back_to_home")
         st.title(title)
         if subtitle:
             st.caption(subtitle)
