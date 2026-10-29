@@ -7,3 +7,8 @@ button[aria-pressed="true"],#review {background:var(--paw-primary);color:var(--p
 svg {width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:2;}
 p {font:inherit; color:var(--paw-muted); margin:var(--paw-space-2) 0;}
 .transcript {font:inherit; font-size:var(--paw-small); color:var(--paw-text); white-space:pre-wrap; overflow-wrap:anywhere; max-height:160px; overflow:auto;}
+
+button[aria-busy="true"] {cursor:wait;}
+button[aria-busy="true"]::before {content:"";width:16px;height:16px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:voice-loading .8s linear infinite;}
+@keyframes voice-loading {to {transform:rotate(360deg);}}
+@media(prefers-reduced-motion:reduce) {button[aria-busy="true"]::before {animation:none;}}

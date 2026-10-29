@@ -7,6 +7,7 @@ import streamlit as st
 from gemini_planner import decode_proposal, PlannerError, is_configured
 from voice_planner import live_credential, transcribe
 from voice_completion import save_voice_task
+from voice_status import connection_diagnostic, connection_error_message, record_connection_end
 
 
 @st.cache_resource
@@ -22,6 +23,15 @@ def voice_component():
 def render_voice(store, owner, profiles, replace_allowed):
     if st.session_state.get("voice_error"):
         st.error(st.session_state.voice_error)
+        detail = st.session_state.get("voice_diagnostic", {})
+        if detail:
+            with st.expander("Connection details"):
+                if "code" in detail:
+                    st.text(f"Connection code: {detail['code']}")
+                if "seconds" in detail:
+                    st.text(f"Session duration: {detail['seconds']} seconds")
+                if detail.get("provider_reason"):
+                    st.text(detail["provider_reason"])
     credential = st.session_state.get("voice_credential")
     if credential and (credential.get("owner_id") != owner.owner_id or time() - credential.get("issued_at", 0) >= 360):
         st.session_state.pop("voice_credential", None)
@@ -41,7 +51,9 @@ def render_voice(store, owner, profiles, replace_allowed):
     try:
         if event.get("kind") == "connect":
             st.session_state.pop("voice_error", None)
-            st.session_state.voice_credential = live_credential(owner, profiles, st.session_state.get("conversation"))
+            st.session_state.pop("voice_diagnostic", None)
+            with st.spinner("Getting speech ready..."):
+                st.session_state.voice_credential = live_credential(owner, profiles, st.session_state.get("conversation"))
             st.rerun()
         if event.get("kind") == "dictation":
             st.session_state.pop("voice_error", None)
@@ -54,6 +66,10 @@ def render_voice(store, owner, profiles, replace_allowed):
             st.session_state.pop("voice_credential", None)
             st.rerun()
         if event.get("kind") == "live_complete":
+            detail = connection_diagnostic(event)
+            st.session_state.voice_diagnostic = detail
+            if event.get("error"):
+                record_connection_end(detail)
             if event.get("save_requested") and not event.get("error"):
                 credential = st.session_state.get("voice_credential")
                 if (not replace_allowed or event.get("confirmation_after_preview") is not True
@@ -84,7 +100,7 @@ def render_voice(store, owner, profiles, replace_allowed):
             st.session_state.conversation = (st.session_state.get("conversation", []) + safe)[-6:]
             proposal = event.get("proposal")
             if event.get("error"):
-                st.session_state.voice_error = "Voice disconnected. Try again or type."
+                st.session_state.voice_error = connection_error_message(detail)
                 st.session_state.preview_blocked = True
                 proposal = None
             if proposal:

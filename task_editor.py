@@ -54,6 +54,7 @@ def cancel_editor():
     st.session_state.pop("voice_credential", None)
     st.session_state.pop("voice_event_id", None)
     st.session_state.pop("voice_error", None)
+    st.session_state.pop("voice_diagnostic", None)
 
 
 def keep_draft():

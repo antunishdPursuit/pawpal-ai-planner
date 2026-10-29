@@ -38,9 +38,11 @@ Dependencies are pinned to the versions verified in this build. Credentials and 
 Inside Conversation:
 
 - **Dictate:** allow the microphone, speak, then **Stop**. Gemini 3.8 Flash transcribes the recording into editable request text. Check names and dates before creating the preview.
-- **Talk live → Start live:** speak with Gemini 3.8 Live. PawPal repeats the task details and asks whether to save. Say **yes** to finish one task: the microphone stops, the closing audio finishes, the app saves the task once and opens its date in Agenda. Use **save anyway** for a time conflict. **Review task** remains an option for editing and button confirmation instead.
+- **Talk live → Start live:** Talk live shows a disabled **Getting speech ready...** indicator while credentials load. Once prepared, select Start live to connect your microphone. The loading indicator stays until setup completes; **Live is ready** means the live connection is active. Speak with Gemini 3.8 Live. PawPal repeats the task details and asks whether to save. Say **yes** to finish one task: the microphone stops, the closing audio finishes, the app saves the task once and opens its date in Agenda. Use **save anyway** for a time conflict. **Review task** remains an option for editing and button confirmation instead.
 
 The assistant knows the selected user, their pets and a bounded snapshot of unfinished tasks. It can describe the local user list, but cannot change users, register pets, or schedule for another owner. Use the sidebar to change users first.
+
+If live speech disconnects, the transcript remains available. The error distinguishes network interruption, service rejection, timeout and microphone permission; **Connection details** shows a bounded close code/reason when supplied by the service. Server logs retain connection metadata only, without transcripts or credentials. An advance service shutdown notice keeps the connection active for its stated grace period.
 
 Voice needs a supported browser, microphone permission, network and a configured Gemini key. Dictation is limited to 30 seconds, live sessions to 3 minutes. Ending the dialog, changing modes/users or stopping releases the microphone, connection and playback. Typed/manual entry remains available.
 
@@ -115,13 +117,13 @@ python -B -m pytest -p no:cacheprovider -q
 python -B main.py
 ```
 
-Run the homepage interaction regressions separately with Node.js (no package installation):
+Run the homepage and voice interaction regressions separately with Node.js (no package installation):
 
 ```powershell
-node --test tests/homepage.test.cjs
+node --test tests/homepage.test.cjs tests/voice.test.cjs
 ```
 
-These checks use a deterministic DOM and animation-clock model for autoplay,
+The voice checks use mocked audio, sockets and timers for preparation, setup, disconnects, cleanup and confirmation. The homepage checks use a deterministic DOM and animation-clock model for autoplay,
 visibility, picture clicks, manual takeover, and scroll mapping. Verify layout,
 images, and the native planner callback in a browser as well.
 

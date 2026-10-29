@@ -1,6 +1,7 @@
 export default function({parentElement,data,setStateValue}) {
  const el=id=>parentElement.querySelector(`#${id}`), dictate=el("dictate"),live=el("live"),stop=el("stop"),review=el("review"),status=el("status"),transcript=el("transcript");
- let stream,input,output,source,processor,silent,socket,timer,connectTimer;
+ let stream,input,output,source,processor,silent,socket,timer,connectTimer,closeTimer,goAwayTimer;
+ let phase="idle",startedAt=0,goingAway=false;
  let mode=null,disposed=false,ended=false,ready=false,proposal=null,history=[],buffers=[],frames=0,parts=[],partFrames=0,nextTime=0;
  let candidate=null,candidateId=null,saveIntent=false,closingStarted=false,finishTimer,userTurns=0,candidateTurn=0;
  const playing=new Set(),message=text=>status.textContent=text;
@@ -12,11 +13,14 @@ export default function({parentElement,data,setStateValue}) {
  function controls(active) {
   dictate.disabled=active||!data.configured;live.disabled=active||!data.configured||!data.replace_allowed;
   stop.hidden=!active;review.hidden=!active||!proposal;
+  live.setAttribute("aria-busy",String(active&&mode==="live"&&!ready));
+  live.textContent=active&&mode==="live"?(ready?"Live connected":"Getting speech ready..."):available()?"Start live":"Talk live";
   dictate.setAttribute("aria-pressed",String(active&&mode==="dictation"));live.setAttribute("aria-pressed",String(active&&mode==="live"));
  }
+ function preparing(){dictate.disabled=true;live.disabled=true;live.textContent="Getting speech ready...";live.setAttribute("aria-busy","true");message("Getting speech ready...");}
  function stopPlayback(){for(const p of playing){try{p.stop();}catch{}}playing.clear();nextTime=0;}
  function release(){
-  clearTimeout(timer);clearTimeout(connectTimer);clearTimeout(finishTimer);
+  clearTimeout(timer);clearTimeout(connectTimer);clearTimeout(finishTimer);clearTimeout(closeTimer);clearTimeout(goAwayTimer);
   if(processor){processor.port.onmessage=null;processor.disconnect();}source?.disconnect();silent?.disconnect();stream?.getTracks().forEach(t=>t.stop());
   if(socket){socket.onmessage=null;socket.onerror=null;socket.onclose=null;socket.close();}
   stopPlayback();input?.close().catch(()=>{});output?.close().catch(()=>{});
@@ -35,12 +39,16 @@ export default function({parentElement,data,setStateValue}) {
   if(history.at(-1)?.role===role)history.at(-1).text=(history.at(-1).text+text).slice(-2000);else history.push({role,text:text.slice(-2000)});
   history=history.slice(-6);transcript.textContent=history.map(i=>`${i.role==="user"?"You":"PawPal"}: ${i.text}`).join("\n").slice(-1500);transcript.scrollTop=transcript.scrollHeight;
  }
- function finish(error=""){
+ function finish(error="",cause="stopped",detail={}){
   if(ended||disposed)return;ended=true;const which=mode,count=frames,chunks=buffers.slice(),rate=input?.sampleRate,result=!error&&proposal?{...proposal}:null;
   const completing=saveIntent&&candidate&&userTurns===candidateTurn+1;
+  const diagnostic={cause,phase,elapsed_ms:Math.max(0,Date.now()-startedAt),...detail};
+  if(typeof diagnostic.provider_reason==="string"){
+   diagnostic.provider_reason=diagnostic.provider_reason.replaceAll(data.credential?.token||"__no_token__","[credential omitted]").replace(/(?:https?|wss?):\/\/\S+/gi,"[connection URL omitted]").slice(0,300);
+  }
   if(result)delete result._callId;release();controls(false);message(completing?"Saving task...":error||"Stopped");
   if(which==="dictation"){if(count&&!error)emit({kind:"dictation",audio:wav(chunks,count,rate)});}
-  else emit({kind:"live_complete",proposal:completing?candidate:result,history,error:completing?"":error,
+  else emit({kind:"live_complete",diagnostic,proposal:completing?candidate:result,history,error:completing?"":error,
              save_requested:Boolean(completing),confirmation_after_preview:userTurns===candidateTurn+1,proposal_id:candidateId,session_id:data.credential?.session_id});
  }
  function send(value){if(socket?.readyState===WebSocket.OPEN)socket.send(JSON.stringify(value));}
@@ -68,51 +76,58 @@ export default function({parentElement,data,setStateValue}) {
   source.connect(processor);processor.connect(silent);silent.connect(input.destination);return true;
  }
  async function start(which){
-  mode=which;ended=false;ready=false;proposal=null;candidate=null;candidateId=null;saveIntent=false;closingStarted=false;userTurns=0;candidateTurn=0;history=[];buffers=[];frames=0;transcript.textContent="";controls(true);message(which==="dictation"?"Listening...":"Connecting...");
+  mode=which;phase="microphone";startedAt=Date.now();goingAway=false;ended=false;ready=false;proposal=null;candidate=null;candidateId=null;saveIntent=false;closingStarted=false;userTurns=0;candidateTurn=0;history=[];buffers=[];frames=0;transcript.textContent="";controls(true);message(which==="dictation"?"Listening...":"Getting speech ready...");
   try{
    if(which==="live"){output=new AudioContext({sampleRate:24000});await output.resume();}
    if(disposed||ended)return;
    if(!await microphone())return;if(which==="dictation"){timer=setTimeout(()=>finish(),30000);return;}
-   const credential=data.credential;markUsed();
+   phase="connecting";const credential=data.credential;markUsed();
    socket=new WebSocket("wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained?access_token="+encodeURIComponent(credential.token));
    socket.onopen=()=>send({setup:{model:`models/${credential.model}`,generationConfig:{responseModalities:["AUDIO"]}}});
-   connectTimer=setTimeout(()=>finish("Voice connection timed out. Try again."),15000);
+   connectTimer=setTimeout(()=>finish("Speech took too long to connect. Try again or type.","connection_timeout"),15000);
    socket.onmessage=async event=>{
-    if(ended||disposed)return;let raw=event.data;if(raw instanceof Blob)raw=await raw.text();if(ended||disposed)return;let result;try{result=JSON.parse(raw);}catch{finish("Voice response unavailable. Try again.");return;}
-    if(result.setupComplete){clearTimeout(connectTimer);ready=true;message("Listening...");timer=setTimeout(()=>finish(),180000);send({clientContent:{turns:[{role:"user",parts:[{text:"Greet the current user briefly and ask what they want to plan."}]}],turnComplete:true}});}
+    if(ended||disposed)return;let raw=event.data;if(raw instanceof Blob)raw=await raw.text();if(ended||disposed)return;let result;try{result=JSON.parse(raw);}catch{finish("Voice response unavailable. Try again.","invalid_response");return;}
+    if(result.error){finish("The speech service rejected this session. Try again or type.","provider_error",{provider_reason:String(result.error.message||"")});return;}
+    if(result.setupComplete){clearTimeout(connectTimer);ready=true;phase="listening";controls(true);message("Live is ready. Listening...");timer=setTimeout(()=>finish("","session_limit"),180000);send({clientContent:{turns:[{role:"user",parts:[{text:"Greet the current user briefly and ask what they want to plan."}]}],turnComplete:true}});}
     const c=result.serverContent;
     if(c){
      if(c.interrupted){stopPlayback();proposal=null;review.hidden=true;}
      if(c.inputTranscription?.text){proposal=null;review.hidden=true;append("user",c.inputTranscription.text);}
      if(c.outputTranscription?.text){if(saveIntent)closingStarted=true;append("assistant",c.outputTranscription.text);}
-     for(const p of c.modelTurn?.parts||[])if(p.inlineData?.data){if(history.at(-1)?.role==="user")history.push({role:"assistant",text:""});if(saveIntent)closingStarted=true;message("PawPal is speaking...");try{play(p.inlineData.data);}catch{message("Audio unavailable. Read the transcript.");}}
+     for(const p of c.modelTurn?.parts||[])if(p.inlineData?.data){if(history.at(-1)?.role==="user")history.push({role:"assistant",text:""});if(saveIntent)closingStarted=true;phase="speaking";message("PawPal is speaking...");try{play(p.inlineData.data);}catch{message("Audio unavailable. Read the transcript.");}}
      if(c.turnComplete){
       if(saveIntent&&closingStarted){const remaining=output?Math.max(0,nextTime-output.currentTime):0;clearTimeout(finishTimer);finishTimer=setTimeout(()=>finish(),remaining*1000+100);}
-      else message(proposal?"Confirm the details aloud":"Listening...");
+      else {phase=proposal?"confirming":"listening";message(proposal?"Confirm the details aloud":"Live is ready. Listening...");}
      }
     }
     for(const call of result.toolCall?.functionCalls||[]){
      if(call.name==="save_task"){
       if(!candidate||call.args?.proposal_id!==candidateId||userTurns!==candidateTurn+1){send({toolResponse:{functionResponses:[{id:call.id,name:call.name,response:{error:"Preview and confirm the latest task first."}}]}});continue;}
       saveIntent=true;closingStarted=false;ready=false;stream?.getTracks().forEach(t=>t.stop());if(processor){processor.port.onmessage=null;processor.disconnect();}source?.disconnect();
-      message("Finishing your task...");review.hidden=true;
+      phase="finishing";message("Finishing your task...");review.hidden=true;
       send({toolResponse:{functionResponses:[{id:call.id,name:call.name,response:{status:"saving_requested",instruction:"Say only: I've got the details. I'll save that now. Then finish your turn."}}]}});
       clearTimeout(finishTimer);finishTimer=setTimeout(()=>finish(),12000);continue;
      }
      if(call.name!=="preview_task"){send({toolResponse:{functionResponses:[{id:call.id,name:call.name,response:{error:"Unsupported action"}}]}});continue;}
      if(!call.args||typeof call.args!=="object"||Array.isArray(call.args)){proposal=null;review.hidden=true;send({toolResponse:{functionResponses:[{id:call.id,name:call.name,response:{error:"Invalid preview"}}]}});continue;}
-     proposal={...call.args};candidate={...call.args};candidateId=call.id;candidateTurn=userTurns;proposal._callId=call.id;review.hidden=false;message("Confirm the details aloud");
+     proposal={...call.args};candidate={...call.args};candidateId=call.id;candidateTurn=userTurns;proposal._callId=call.id;review.hidden=false;phase="confirming";message("Confirm the details aloud");
      send({toolResponse:{functionResponses:[{id:call.id,name:call.name,response:{status:"awaiting_spoken_confirmation",proposal_id:candidateId,instruction:"Repeat the details, ask Shall I save it, then wait for an explicit user yes. Do not claim saved."}}]}});
     }
     if(result.toolCallCancellation?.ids?.includes(candidateId)){proposal=null;candidate=null;candidateId=null;saveIntent=false;review.hidden=true;}
-    if(result.goAway)finish("Session ended. Start a new conversation.");
+    if(result.goAway){
+     goingAway=true;message("This live session will end soon. Finish your task or start a new conversation.");
+     const seconds=Number.parseFloat(result.goAway.timeLeft);
+     if(Number.isFinite(seconds)&&seconds>=0){clearTimeout(goAwayTimer);goAwayTimer=setTimeout(()=>finish("The speech service ended this session. Try Talk live again or type.","server_go_away"),Math.min(seconds,3600)*1000);}
+    }
    };
-   socket.onerror=()=>finish("Voice connection failed. Try again or type.");socket.onclose=()=>{if(!ended)finish("Voice disconnected. Try again or type.");};
-  }catch(error){release();ended=true;controls(false);message(error?.name==="NotAllowedError"?"Allow the microphone to use voice.":"Microphone unavailable. You can type instead.");}
+   // onclose carries the useful code/reason; onerror alone does not.
+   socket.onerror=()=>{clearTimeout(closeTimer);closeTimer=setTimeout(()=>finish("Voice connection failed. Try again or type.","connection_error"),1000);};
+   socket.onclose=event=>{if(!ended)finish("Voice disconnected. Try again or type.",goingAway?"server_go_away":"connection_closed",{code:event.code,provider_reason:event.reason,was_clean:event.wasClean});};
+  }catch(error){finish(error?.name==="NotAllowedError"?"Allow the microphone to use voice.":"Microphone unavailable. You can type instead.",error?.name==="NotAllowedError"?"microphone_denied":"audio_unavailable");}
  }
- dictate.onclick=()=>start("dictation");live.textContent=available()?"Start live":"Talk live";
- live.onclick=()=>{if(available())start("live");else{live.disabled=true;message("Preparing voice...");emit({kind:"connect"});}};
- stop.onclick=()=>finish();review.onclick=()=>finish();controls(false);if(!data.configured)message("Voice unavailable");else if(available())message("Ready");
- const hide=()=>{if(mode&&!ended)finish();};window.addEventListener("pagehide",hide);
+ dictate.onclick=()=>{if(!dictate.disabled)start("dictation");};
+ live.onclick=()=>{if(live.disabled)return;if(available())start("live");else{preparing();emit({kind:"connect"});}};
+ stop.onclick=()=>finish();review.onclick=()=>finish("","review");controls(false);if(!data.configured)message("Voice unavailable");else if(available())message("Speech is prepared. Select Start live to connect your microphone.");
+ const hide=()=>{if(mode&&!ended)finish("","page_hidden");};window.addEventListener("pagehide",hide);
  return()=>{disposed=true;ended=true;release();window.removeEventListener("pagehide",hide);};
 }
