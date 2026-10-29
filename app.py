@@ -13,6 +13,7 @@ from planner_storage import PlannerStore
 from task_editor import show_editor, open_editor, cancel_editor, has_draft_content, map_search_url
 from gemini_planner import is_configured, configuration
 from ui_components import task_summary, calendar_chip, brand
+from homepage import show_home
 
 st.set_page_config(page_title="PawPal AI Planner", page_icon=favicon(), layout="wide", initial_sidebar_state="expanded")
 apply_theme()
@@ -147,6 +148,10 @@ def pet_form(store):
             st.rerun()
 
 
+def open_planner():
+    navigate("Pets" if st.session_state.get("active_owner_id") is not None else "User")
+
+
 def sidebar(owner, profiles):
     with st.sidebar:
         brand()
@@ -159,6 +164,9 @@ def sidebar(owner, profiles):
                 st.button("Choose user" if profiles else "Add user", on_click=navigate,
                           args=("User",), use_container_width=True)
         with st.container(key="workspace_nav"):
+            st.button("Home", icon=":material/home:", on_click=navigate, args=("Home",),
+                      key="nav_Home", use_container_width=True,
+                      type="primary" if st.session_state.page == "Home" else "secondary")
             for page, icon in (("Pets", ":material/pets:"), ("Calendar", ":material/calendar_month:")):
                 enabled = page == "User" or (owner is not None and (page == "Pets" or any(p.pet_count for p in profiles)))
                 st.button(page, icon=icon, on_click=navigate, args=(page,), key=f"nav_{page}",
@@ -324,12 +332,14 @@ def main():
         selected = st.session_state.get("active_owner_id")
         store = PlannerStore(root_store.path, owner_id=selected)
         owner = store.load() if selected is not None else None
+        st.session_state.setdefault("page", "Home")
         if owner is None:
             if selected is not None:
                 activate_profile(None)
             st.session_state.active_owner_id = None
-            st.session_state.page = "User"
-        elif st.session_state.get("page") not in ("User", "Pets", "Calendar"):
+            if st.session_state.page not in ("Home", "User"):
+                st.session_state.page = "User"
+        elif st.session_state.get("page") not in ("Home", "User", "Pets", "Calendar"):
             st.session_state.page = "Pets"
         elif st.session_state.page == "Calendar" and not any(p.pet_count for p in profiles):
             st.session_state.page = "Pets"
@@ -339,6 +349,9 @@ def main():
     page = sidebar(owner, profiles)
     if "notice" in st.session_state:
         st.success(st.session_state.pop("notice"))
+    if page == "Home":
+        show_home(open_planner)
+        return
     if page == "User":
         user_page(root_store, owner, profiles)
         return

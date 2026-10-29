@@ -17,7 +17,7 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 python -m streamlit run app.py --server.address 127.0.0.1
 ```
 
-Open the localhost URL printed by Streamlit. Choose or create a local user, then add a pet on **Pets**. Saving a pet opens **Calendar**. No sample users, pets, or tasks are automatically created.
+Open the localhost URL printed by Streamlit. From **Home**, select **Open planner**, choose or create a local user, then add a pet on **Pets**. Saving a pet opens **Calendar**. No sample users, pets, or tasks are automatically created.
 
 The default model is `gemini-3.8-flash`. Set `GEMINI_MODEL` in .env to override it with a compatible model your API project can use. Manual entry works without a key or network access. Restarting the app retains saved profiles, pets, tasks, schedules, and completion dates; unsaved drafts and conversation history are temporary.
 
