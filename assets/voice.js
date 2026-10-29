@@ -1,7 +1,8 @@
 export default function({parentElement,data,setStateValue}) {
  const el=id=>parentElement.querySelector(`#${id}`), dictate=el("dictate"),live=el("live"),stop=el("stop"),review=el("review"),status=el("status"),transcript=el("transcript");
  let stream,input,output,source,processor,silent,socket,timer,connectTimer,closeTimer,goAwayTimer;
- let phase="idle",startedAt=0,goingAway=false;
+ let phase="idle",startedAt=0,goingAway=false,milestones=[],inputChunks=0,outputChunks=0;
+ const trace=stage=>{const event={stage,at_ms:Math.max(0,Date.now()-startedAt)};if(milestones.at(-1)?.stage===stage)return;if(milestones.length>=24)milestones.splice(1,1);milestones.push(event);};
  let mode=null,disposed=false,ended=false,ready=false,proposal=null,history=[],buffers=[],frames=0,parts=[],partFrames=0,nextTime=0;
  let candidate=null,candidateId=null,saveIntent=false,closingStarted=false,finishTimer,userTurns=0,candidateTurn=0;
  const playing=new Set(),message=text=>status.textContent=text;
@@ -42,7 +43,9 @@ export default function({parentElement,data,setStateValue}) {
  function finish(error="",cause="stopped",detail={}){
   if(ended||disposed)return;ended=true;const which=mode,count=frames,chunks=buffers.slice(),rate=input?.sampleRate,result=!error&&proposal?{...proposal}:null;
   const completing=saveIntent&&candidate&&userTurns===candidateTurn+1;
-  const diagnostic={cause,phase,elapsed_ms:Math.max(0,Date.now()-startedAt),...detail};
+  trace("ended");
+  const diagnostic={cause,phase,elapsed_ms:Math.max(0,Date.now()-startedAt),milestones,input_chunks:inputChunks,output_chunks:outputChunks,...detail};
+  if(typeof navigator.onLine==="boolean")diagnostic.network_online=navigator.onLine;
   if(typeof diagnostic.provider_reason==="string"){
    diagnostic.provider_reason=diagnostic.provider_reason.replaceAll(data.credential?.token||"__no_token__","[credential omitted]").replace(/(?:https?|wss?):\/\/\S+/gi,"[connection URL omitted]").slice(0,300);
   }
@@ -71,51 +74,51 @@ export default function({parentElement,data,setStateValue}) {
   processor.port.onmessage=({data:chunk})=>{
    if(ended||disposed)return;
    if(mode==="dictation"){buffers.push(chunk);frames+=chunk.length;if(frames>=input.sampleRate*30)finish();}
-   else if(ready){parts.push(chunk);partFrames+=chunk.length;if(partFrames>=1024){send({realtimeInput:{audio:{data:base64(pcm(parts,partFrames)),mimeType:`audio/pcm;rate=${input.sampleRate}`}}});parts=[];partFrames=0;}}
+   else if(ready){parts.push(chunk);partFrames+=chunk.length;if(partFrames>=1024){inputChunks++;send({realtimeInput:{audio:{data:base64(pcm(parts,partFrames)),mimeType:`audio/pcm;rate=${input.sampleRate}`}}});parts=[];partFrames=0;}}
   };
   source.connect(processor);processor.connect(silent);silent.connect(input.destination);return true;
  }
  async function start(which){
-  mode=which;phase="microphone";startedAt=Date.now();goingAway=false;ended=false;ready=false;proposal=null;candidate=null;candidateId=null;saveIntent=false;closingStarted=false;userTurns=0;candidateTurn=0;history=[];buffers=[];frames=0;transcript.textContent="";controls(true);message(which==="dictation"?"Listening...":"Getting speech ready...");
+  mode=which;phase="microphone";startedAt=Date.now();goingAway=false;milestones=[];inputChunks=outputChunks=0;trace("microphone");ended=false;ready=false;proposal=null;candidate=null;candidateId=null;saveIntent=false;closingStarted=false;userTurns=0;candidateTurn=0;history=[];buffers=[];frames=0;transcript.textContent="";controls(true);message(which==="dictation"?"Listening...":"Getting speech ready...");
   try{
    if(which==="live"){output=new AudioContext({sampleRate:24000});await output.resume();}
    if(disposed||ended)return;
    if(!await microphone())return;if(which==="dictation"){timer=setTimeout(()=>finish(),30000);return;}
-   phase="connecting";const credential=data.credential;markUsed();
+   phase="connecting";trace("connecting");const credential=data.credential;markUsed();
    socket=new WebSocket("wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained?access_token="+encodeURIComponent(credential.token));
-   socket.onopen=()=>send({setup:{model:`models/${credential.model}`,generationConfig:{responseModalities:["AUDIO"]}}});
+   socket.onopen=()=>{trace("socket_open");send({setup:{model:`models/${credential.model}`,generationConfig:{responseModalities:["AUDIO"]}}});};
    connectTimer=setTimeout(()=>finish("Speech took too long to connect. Try again or type.","connection_timeout"),15000);
    socket.onmessage=async event=>{
     if(ended||disposed)return;let raw=event.data;if(raw instanceof Blob)raw=await raw.text();if(ended||disposed)return;let result;try{result=JSON.parse(raw);}catch{finish("Voice response unavailable. Try again.","invalid_response");return;}
     if(result.error){finish("The speech service rejected this session. Try again or type.","provider_error",{provider_reason:String(result.error.message||"")});return;}
-    if(result.setupComplete){clearTimeout(connectTimer);ready=true;phase="listening";controls(true);message("Live is ready. Listening...");timer=setTimeout(()=>finish("","session_limit"),180000);send({clientContent:{turns:[{role:"user",parts:[{text:"Greet the current user briefly and ask what they want to plan."}]}],turnComplete:true}});}
+    if(result.setupComplete){clearTimeout(connectTimer);ready=true;phase="listening";trace("listening");controls(true);message("Live is ready. Listening...");timer=setTimeout(()=>finish("","session_limit"),180000);send({clientContent:{turns:[{role:"user",parts:[{text:"Greet the current user briefly and ask what they want to plan."}]}],turnComplete:true}});}
     const c=result.serverContent;
     if(c){
      if(c.interrupted){stopPlayback();proposal=null;review.hidden=true;}
      if(c.inputTranscription?.text){proposal=null;review.hidden=true;append("user",c.inputTranscription.text);}
      if(c.outputTranscription?.text){if(saveIntent)closingStarted=true;append("assistant",c.outputTranscription.text);}
-     for(const p of c.modelTurn?.parts||[])if(p.inlineData?.data){if(history.at(-1)?.role==="user")history.push({role:"assistant",text:""});if(saveIntent)closingStarted=true;phase="speaking";message("PawPal is speaking...");try{play(p.inlineData.data);}catch{message("Audio unavailable. Read the transcript.");}}
+     for(const p of c.modelTurn?.parts||[])if(p.inlineData?.data){if(history.at(-1)?.role==="user")history.push({role:"assistant",text:""});if(saveIntent)closingStarted=true;outputChunks++;phase="speaking";trace("speaking");message("PawPal is speaking...");try{play(p.inlineData.data);}catch{message("Audio unavailable. Read the transcript.");}}
      if(c.turnComplete){
       if(saveIntent&&closingStarted){const remaining=output?Math.max(0,nextTime-output.currentTime):0;clearTimeout(finishTimer);finishTimer=setTimeout(()=>finish(),remaining*1000+100);}
-      else {phase=proposal?"confirming":"listening";message(proposal?"Confirm the details aloud":"Live is ready. Listening...");}
+      else {phase=proposal?"confirming":"listening";trace(phase);message(proposal?"Confirm the details aloud":"Live is ready. Listening...");}
      }
     }
     for(const call of result.toolCall?.functionCalls||[]){
      if(call.name==="save_task"){
       if(!candidate||call.args?.proposal_id!==candidateId||userTurns!==candidateTurn+1){send({toolResponse:{functionResponses:[{id:call.id,name:call.name,response:{error:"Preview and confirm the latest task first."}}]}});continue;}
       saveIntent=true;closingStarted=false;ready=false;stream?.getTracks().forEach(t=>t.stop());if(processor){processor.port.onmessage=null;processor.disconnect();}source?.disconnect();
-      phase="finishing";message("Finishing your task...");review.hidden=true;
+      phase="finishing";trace("finishing");message("Finishing your task...");review.hidden=true;
       send({toolResponse:{functionResponses:[{id:call.id,name:call.name,response:{status:"saving_requested",instruction:"Say only: I've got the details. I'll save that now. Then finish your turn."}}]}});
       clearTimeout(finishTimer);finishTimer=setTimeout(()=>finish(),12000);continue;
      }
      if(call.name!=="preview_task"){send({toolResponse:{functionResponses:[{id:call.id,name:call.name,response:{error:"Unsupported action"}}]}});continue;}
      if(!call.args||typeof call.args!=="object"||Array.isArray(call.args)){proposal=null;review.hidden=true;send({toolResponse:{functionResponses:[{id:call.id,name:call.name,response:{error:"Invalid preview"}}]}});continue;}
-     proposal={...call.args};candidate={...call.args};candidateId=call.id;candidateTurn=userTurns;proposal._callId=call.id;review.hidden=false;phase="confirming";message("Confirm the details aloud");
+     proposal={...call.args};candidate={...call.args};candidateId=call.id;candidateTurn=userTurns;proposal._callId=call.id;review.hidden=false;phase="confirming";trace("confirming");message("Confirm the details aloud");
      send({toolResponse:{functionResponses:[{id:call.id,name:call.name,response:{status:"awaiting_spoken_confirmation",proposal_id:candidateId,instruction:"Repeat the details, ask Shall I save it, then wait for an explicit user yes. Do not claim saved."}}]}});
     }
     if(result.toolCallCancellation?.ids?.includes(candidateId)){proposal=null;candidate=null;candidateId=null;saveIntent=false;review.hidden=true;}
     if(result.goAway){
-     goingAway=true;message("This live session will end soon. Finish your task or start a new conversation.");
+     goingAway=true;trace("server_warning");message("This live session will end soon. Finish your task or start a new conversation.");
      const seconds=Number.parseFloat(result.goAway.timeLeft);
      if(Number.isFinite(seconds)&&seconds>=0){clearTimeout(goAwayTimer);goAwayTimer=setTimeout(()=>finish("The speech service ended this session. Try Talk live again or type.","server_go_away"),Math.min(seconds,3600)*1000);}
     }

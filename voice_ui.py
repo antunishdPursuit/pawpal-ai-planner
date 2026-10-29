@@ -3,15 +3,19 @@ import json
 import sqlite3
 from time import time
 from pathlib import Path
+from uuid import uuid4
+from time import monotonic
 import streamlit as st
 from gemini_planner import decode_proposal, PlannerError, is_configured
 from voice_planner import live_credential, transcribe
 from voice_completion import save_voice_task
 from voice_status import connection_diagnostic, connection_error_message, record_connection_end
+from voice_telemetry import record_voice_event
 
 
 @st.cache_resource
 def voice_component():
+    record_voice_event("diagnostics_enabled")
     root = Path(__file__).parent / "assets"
     return st.components.v2.component(
         "pawpal_voice", html=(root / "voice.html").read_text(encoding="utf-8"),
@@ -52,8 +56,19 @@ def render_voice(store, owner, profiles, replace_allowed):
         if event.get("kind") == "connect":
             st.session_state.pop("voice_error", None)
             st.session_state.pop("voice_diagnostic", None)
-            with st.spinner("Getting speech ready..."):
-                st.session_state.voice_credential = live_credential(owner, profiles, st.session_state.get("conversation"))
+            attempt = str(uuid4())
+            st.session_state.voice_attempt_id = attempt
+            record_voice_event("credential_requested", attempt_id=attempt)
+            started = monotonic()
+            try:
+                with st.spinner("Getting speech ready..."):
+                    st.session_state.voice_credential = live_credential(owner, profiles, st.session_state.get("conversation"))
+            except Exception:
+                record_voice_event("credential_failed", attempt_id=attempt,
+                                   preparation_seconds=monotonic() - started)
+                raise
+            record_voice_event("credential_prepared", attempt_id=attempt,
+                               preparation_seconds=monotonic() - started)
             st.rerun()
         if event.get("kind") == "dictation":
             st.session_state.pop("voice_error", None)
@@ -68,6 +83,8 @@ def render_voice(store, owner, profiles, replace_allowed):
         if event.get("kind") == "live_complete":
             detail = connection_diagnostic(event)
             st.session_state.voice_diagnostic = detail
+            record_voice_event("live_ended", attempt_id=st.session_state.get("voice_attempt_id"),
+                               diagnostic=event.get("diagnostic"), failed=bool(event.get("error")))
             if event.get("error"):
                 record_connection_end(detail)
             if event.get("save_requested") and not event.get("error"):

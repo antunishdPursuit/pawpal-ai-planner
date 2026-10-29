@@ -25,6 +25,25 @@ def connection_diagnostic(event):
         detail["seconds"] = round(duration / 1000, 1)
     if type(raw.get("was_clean")) is bool:
         detail["was_clean"] = raw["was_clean"]
+    online = raw.get("network_online")
+    if type(online) is bool:
+        detail["network_online"] = online
+    for key in ("input_chunks", "output_chunks"):
+        value = raw.get(key)
+        if type(value) is int and 0 <= value <= 1_000_000:
+            detail[key] = value
+    stages = raw.get("milestones")
+    if isinstance(stages, list):
+        allowed = PHASES | {"socket_open", "server_warning", "ended"}
+        safe = []
+        for entry in stages[:24]:
+            if not isinstance(entry, dict):
+                continue
+            stage, elapsed = entry.get("stage"), entry.get("at_ms")
+            if (isinstance(stage, str) and stage in allowed
+                    and type(elapsed) is int and 0 <= elapsed <= 3_600_000):
+                safe.append({"stage": stage, "at_ms": elapsed})
+        detail["milestones"] = safe
     reason = raw.get("provider_reason")
     if isinstance(reason, str):
         # Provider text is evidence, not markup. Never retain a URL or token.

@@ -86,3 +86,13 @@ test('explicit confirmation still completes one task after the closing turn',asy
  await s.message({serverContent:{outputTranscription:{text:"I'll save that now."},turnComplete:true}});p.advance(101);
  assert.equal(p.events.length,1);assert.equal(p.events[0].save_requested,true);assert.equal(p.events[0].confirmation_after_preview,true);assert.equal(p.events[0].proposal_id,'proposal-1');assert.equal(p.events[0].diagnostic.phase,'finishing');
 });
+
+test('connection milestones stay local until the end and contain no speech or credentials',async()=>{
+ const p=await connected(),s=p.sockets[0];assert.equal(p.events.length,0);
+ await s.message({serverContent:{outputTranscription:{text:'PRIVATE DIALOGUE'},modelTurn:{parts:[{inlineData:{data:'AAA='}}]},turnComplete:true}});
+ assert.equal(p.events.length,0);s.drop(1006);
+ assert.equal(p.events.length,1);const d=p.events[0].diagnostic;
+ assert.deepEqual(Array.from(d.milestones,m=>m.stage),['microphone','connecting','socket_open','listening','speaking','listening','ended']);
+ assert.equal(d.output_chunks,1);assert.equal(d.input_chunks,0);
+ assert.doesNotMatch(JSON.stringify(d),/PRIVATE|test-only|fake-session/);
+});
