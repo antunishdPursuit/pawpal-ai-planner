@@ -352,6 +352,7 @@ def main():
     if page == "Home":
         show_home(open_planner)
         return
+    st.button("Back to Home", on_click=navigate, args=("Home",), key="back_to_home")
     if page == "User":
         user_page(root_store, owner, profiles)
         return
