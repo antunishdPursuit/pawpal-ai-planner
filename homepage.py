@@ -27,3 +27,5 @@ def show_home(open_planner):
     with st.container(key="homepage_navigation", horizontal=True, vertical_alignment="center"):
         st.button("Open planner", type="primary", on_click=open_planner, key="home_open_planner")
     st.html(_homepage_html(), unsafe_allow_javascript=True)
+    with st.container(key="homepage_closing"):
+        st.button("Open planner", type="primary", on_click=open_planner, key="home_closing_planner")
