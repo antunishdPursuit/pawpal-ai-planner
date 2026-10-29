@@ -16,7 +16,10 @@
   const slot = root.querySelector('.paw-home-planner-slot');
   const reduce = matchMedia('(prefers-reduced-motion: reduce)');
   const stops = [0, 1.3, 2.3, 3.4];
-  const duration = 16000;
+  // Start as the final message appears, before its 240ms fade finishes.
+  const openingLead = 1560;
+  const scrollDuration = 20000;
+  const duration = openingLead + scrollDuration;
   const clamp = value => Math.max(0, Math.min(1, value));
   const smooth = value => { value = clamp(value); return value * value * (3 - 2 * value); };
   const start = () => main.scrollTop + travel.getBoundingClientRect().top - main.getBoundingClientRect().top;
@@ -44,7 +47,8 @@
     cat.style.transform = `translateX(${-(cat.offsetLeft + cat.offsetWidth + 8) * petProgress}px)`;
     stages.forEach((stage, i) => {
       stage.style.opacity = String(alpha[i]);
-      stage.style.transform = reduce.matches ? 'none' : `translateY(calc(${stops[i] - u} * var(--paw-space-8)))`;
+      const drift = reduce.matches ? '0px' : `calc(${stops[i] - u} * var(--paw-space-8))`;
+      stage.style.transform = i === 3 ? `translateY(calc(-50% + ${drift}))` : `translateY(${drift})`;
       stage.style.visibility = alpha[i] > .001 ? 'visible' : 'hidden';
       stage.inert = i !== active || alpha[i] < .001;
       stage.setAttribute('aria-hidden', String(stage.inert));
@@ -83,8 +87,8 @@
     root.dataset.autoSteps = JSON.stringify(history);
   }
 
-  // One constant-speed pass; no per-panel holds or scroll snapping.
-  const timeline = t => 3.4 * clamp(t / duration);
+  // After the opening message reveal, one slower pass with no panel holds.
+  const timeline = t => 3.4 * clamp((t - openingLead) / scrollDuration);
   function tick(now) {
     queued = false;
     if (!root.isConnected) { cleanup(); return; }
@@ -112,7 +116,12 @@
     main.scrollTo({top:0, behavior:'instant'});
     announceStatus(); schedule();
   }
-  function toTop(event) { event.preventDefault(); reset(false, true); }
+  function toTop(event) {
+    event.preventDefault();
+    // An explicit restart overrides the earlier keyboard pause before root focus.
+    keyboardNavigation = false;
+    reset(event.currentTarget === footerBack, true);
+  }
   function manual(event) {
     if (event.type === 'pointerdown') keyboardNavigation = false;
     autoMode = false; stop();
