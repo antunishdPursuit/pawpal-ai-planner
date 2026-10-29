@@ -3,6 +3,7 @@ import base64
 from pathlib import Path
 
 import streamlit as st
+from calendar_presentation import CalendarItem, render_timeline
 
 ASSETS = Path(__file__).parent / "assets"
 
@@ -20,6 +21,8 @@ def _homepage_html():
     for layer in ("room", "dog", "cat"):
         markup = markup.replace(f"__{layer.upper()}_IMAGE__", _hero_image(f"home-{layer}.webp"))
     markup = markup.replace("__BRAND_IMAGE__", _hero_image("favicon.png"))
+    preview = render_timeline(["Tomorrow"], [[CalendarItem("Walk Luna", 540, location="The park")]], start_hour=8, end_hour=10)
+    markup = markup.replace("__CALENDAR_PREVIEW__", preview)
     return "<style>" + css + "</style>" + markup + "<script>" + script + "</script>"
 
 

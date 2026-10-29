@@ -48,10 +48,6 @@
 .paw-review-details dd {font-size:var(--paw-heading);line-height:26px;margin:0;}
 .paw-review-place {grid-column:1/-1;}
 .paw-home-calendar h3 {font-size:24px!important;line-height:32px;margin:0 0 var(--paw-space-4);font-weight:600;}
-.paw-calendar-row {display:grid;grid-template-columns:64px 1fr;gap:var(--paw-space-4);align-items:start;padding:var(--paw-space-3) 0;border-top:1px solid var(--paw-border);font-size:var(--paw-small);line-height:22px;}
-.paw-calendar-row strong {display:block;font-size:var(--paw-body);font-weight:600;}
-.paw-calendar-row small {display:block;font-size:var(--paw-small);color:var(--paw-muted);}
-.paw-calendar-selected {padding:var(--paw-space-3);margin:var(--paw-space-1) calc(-1 * var(--paw-space-3));background:var(--paw-selected);border:0;border-radius:var(--paw-space-2);}
 .paw-home-stage.paw-home-copy {left:0;right:0;top:40%;width:min(var(--paw-home-closing-width),calc(100% - 64px));margin-inline:auto;text-align:center;padding:var(--paw-space-8);background:var(--paw-home-closing-surface);border:0;border-radius:var(--paw-radius);}
 .paw-home-copy h1 {font-size:var(--paw-home-closing-title)!important;line-height:1.08!important;letter-spacing:-.03em;font-weight:600;margin:0 0 var(--paw-space-4);padding:0!important;}
 .paw-home-copy p {font-size:var(--paw-home-closing-support);line-height:1.5;margin:0 auto var(--paw-space-6);max-width:640px;}
@@ -73,3 +69,4 @@
   .paw-layer {will-change:auto;}
   .paw-chat li {transition:none;}
 }
+.paw-home-calendar {border-bottom-left-radius:var(--paw-radius);}

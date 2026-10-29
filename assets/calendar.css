@@ -1,0 +1,52 @@
+:root {--paw-calendar-hour:96px;--paw-calendar-event:80px;--paw-calendar-gutter:56px;--paw-calendar-window:560px;}
+.paw-calendar-view {font-family:system-ui,sans-serif;color:var(--paw-text);}
+.paw-calendar-view * {box-sizing:border-box;}
+.paw-time-grid,.paw-anytime-grid {display:grid;grid-template-columns:minmax(0,.5fr) repeat(var(--paw-calendar-columns),minmax(0,1fr));}
+.paw-time-grid {padding-top:var(--paw-space-3);}
+.paw-time-axis,.paw-day-track {position:relative;height:calc(var(--paw-calendar-hours) * var(--paw-calendar-hour) + var(--paw-calendar-event));}
+.paw-time-axis {background:var(--paw-surface);}
+.paw-hour-label {position:absolute;right:var(--paw-space-2);transform:translateY(-50%);font-size:var(--paw-small);line-height:20px;color:var(--paw-muted);white-space:nowrap;}
+.paw-day-track {border-left:1px solid var(--paw-border);background:repeating-linear-gradient(to bottom,var(--paw-border) 0,var(--paw-border) 1px,transparent 1px,transparent var(--paw-calendar-hour));}
+.paw-calendar-event {padding:var(--paw-space-2);border-left:3px solid var(--paw-primary);border-radius:var(--paw-space-1);background:var(--paw-success-bg);color:var(--paw-primary);overflow:hidden;font-size:var(--paw-small);line-height:20px;}
+.paw-time-event {position:absolute;height:var(--paw-calendar-event);}
+.paw-calendar-event strong,.paw-calendar-event span,.paw-calendar-event small {display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--paw-small);line-height:20px;}
+.paw-calendar-event strong {font-weight:600;}
+.paw-calendar-event.blue {background:var(--paw-blue-bg);color:var(--paw-blue);border-color:var(--paw-blue);}
+.paw-calendar-event.rust {background:var(--paw-rust-bg);color:var(--paw-rust);border-color:var(--paw-rust);}
+.paw-calendar-event.projected {border-left-style:dashed;}
+.paw-calendar-event.done {background:var(--paw-muted-surface);color:var(--paw-muted);}
+.paw-calendar-event.done strong {text-decoration:line-through;}
+.paw-calendar-event.overdue {border-color:var(--paw-warning);}
+.paw-anytime-grid {border-bottom:1px solid var(--paw-border);}
+.paw-anytime-label {min-width:0;font-size:var(--paw-small);color:var(--paw-muted);padding:var(--paw-space-3) var(--paw-space-1);text-align:right;white-space:nowrap;}
+.paw-anytime-day {border-left:1px solid var(--paw-border);padding:var(--paw-space-1);display:flex;flex-direction:column;gap:var(--paw-space-1);}
+.paw-anytime-event {min-height:var(--paw-control);}
+.paw-home-calendar .paw-time-grid,.paw-home-calendar .paw-anytime-grid {grid-template-columns:var(--paw-calendar-gutter) minmax(0,1fr);}
+.st-key-calendar_toolbar {gap:var(--paw-space-4);}
+.st-key-date_navigation {gap:var(--paw-space-2);flex-wrap:nowrap!important;}
+.st-key-date_navigation button {padding-inline:var(--paw-space-2);white-space:nowrap;}
+.st-key-calendar_toolbar > .st-key-add_task {margin-left:auto;}
+.st-key-view_switch [role="radiogroup"] {display:flex;flex-direction:row;gap:var(--paw-space-1);align-items:center;padding:var(--paw-space-1);background:var(--paw-muted-surface);border-radius:var(--paw-radius);}
+.st-key-view_switch [role="radiogroup"] label {display:flex;align-items:center;margin:0;padding:0 var(--paw-space-3);border-radius:var(--paw-space-2);}
+.st-key-view_switch [role="radiogroup"] label:has(input:checked) {background:var(--paw-surface);}
+.st-key-week_grid {overflow:auto;overscroll-behavior:contain;max-height:var(--paw-calendar-window);border:1px solid var(--paw-border);border-radius:var(--paw-radius);gap:0;}
+.st-key-week_grid > [data-testid="stLayoutWrapper"]:has(> .st-key-week_header) {position:sticky;top:0;z-index:3;background:var(--paw-surface);}
+.st-key-week_header {background:var(--paw-surface);}
+.st-key-week_header [data-testid="stHorizontalBlock"] {gap:0;min-width:0;flex-wrap:nowrap;}
+.st-key-week_header [data-testid="stColumn"] {padding:0;min-width:0;border-bottom:1px solid var(--paw-border);}
+.st-key-week_header [data-testid="stVerticalBlock"] {gap:0;}
+.st-key-week_header button {width:100%;min-height:var(--paw-control);border:0;border-radius:0;background:var(--paw-surface);}
+.st-key-week_header button[kind="primary"] {background:var(--paw-selected);color:var(--paw-primary);box-shadow:inset 0 -3px var(--paw-primary);}
+.paw-time-heading {height:var(--paw-control);display:flex;align-items:center;justify-content:flex-end;padding-right:var(--paw-space-2);font-size:var(--paw-small);color:var(--paw-muted);}
+.st-key-calendar_surface [class*="st-key-care_"] {border:0!important;border-bottom:1px solid var(--paw-border)!important;border-radius:0;padding:var(--paw-space-4) 0;}
+.st-key-calendar_surface .paw-time {font-size:var(--paw-small);color:var(--paw-muted);font-weight:500;}
+@media(max-width:768px) {
+ .st-key-calendar_filters [data-testid="stColumn"] {flex:1 1 40%;min-width:calc(3 * var(--paw-control) + var(--paw-space-3));}
+ .st-key-week_header [data-testid="stHorizontalBlock"],.st-key-week_grid .paw-calendar-view {min-width:980px;}
+ .st-key-week_header [data-testid="stColumn"] {flex:1 1 0;}
+ .st-key-week_header [data-testid="stColumn"]:first-child {flex:.5 .5 0;}
+}
+@media(max-width:480px) {
+ .st-key-calendar_filters [data-testid="stColumn"]:first-child {flex-basis:100%;}
+ .st-key-calendar_toolbar > [data-testid="stLayoutWrapper"]:has(> .st-key-date_navigation) {flex-basis:100%;}
+}

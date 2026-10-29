@@ -41,24 +41,6 @@ a:focus-visible {outline:3px solid var(--paw-primary)!important; outline-offset:
  background:var(--paw-surface); border:1px solid var(--paw-border);
  border-radius:var(--paw-radius); padding:var(--paw-space-6);
 }
-.st-key-week_grid {overflow-x:auto; overscroll-behavior-x:contain;}
-.st-key-week_grid [data-testid="stHorizontalBlock"] {gap:0; min-width:0; flex-wrap:nowrap;}
-.st-key-week_grid [data-testid="stColumn"] {
- background:var(--paw-surface); border-top:1px solid var(--paw-border);
- border-bottom:1px solid var(--paw-border); border-left:1px solid var(--paw-border);
- padding:var(--paw-space-2); min-width:0; min-height:320px;
-}
-.st-key-week_grid [data-testid="stColumn"]:last-child {border-right:1px solid var(--paw-border);}
-.st-key-week_grid button {border:0; width:100%;}
-.paw-chip {border-left:3px solid var(--paw-primary); border-radius:var(--paw-space-1);
- padding:var(--paw-space-2); margin:var(--paw-space-2) 0;
- background:var(--paw-success-bg); color:var(--paw-primary); overflow-wrap:anywhere;}
-.paw-chip.blue {background:var(--paw-blue-bg); color:var(--paw-blue); border-color:var(--paw-blue);}
-.paw-chip.rust {background:var(--paw-rust-bg); color:var(--paw-rust); border-color:var(--paw-rust);}
-.paw-chip strong {display:block; font-size:var(--paw-small);}
-.paw-chip small {font-size:var(--paw-small);}
-.paw-chip.projected {border-left-style:dashed;}
-.paw-empty-day {font-size:var(--paw-small); color:var(--paw-muted); padding:var(--paw-space-4) var(--paw-space-2);}
 .paw-pet {display:inline-block; color:var(--paw-primary); background:var(--paw-success-bg);
  padding:var(--paw-space-1) var(--paw-space-2); border-radius:var(--paw-space-2); font-size:var(--paw-small);}
 .paw-pet.blue {color:var(--paw-blue); background:var(--paw-blue-bg);}
@@ -103,21 +85,6 @@ a:focus-visible {outline:3px solid var(--paw-primary)!important; outline-offset:
 .st-key-profile_surface,.st-key-pets_surface,.st-key-profile_details {max-width:760px;}
 @media(max-width:768px) {.stMainBlockContainer {padding-top:64px;}}
 
-.st-key-calendar_toolbar {gap:var(--paw-space-4);}
-.st-key-date_navigation {gap:var(--paw-space-2); flex-wrap:nowrap!important;}
-.st-key-date_navigation button {padding-inline:var(--paw-space-2); white-space:nowrap;}
-.st-key-calendar_toolbar > .st-key-add_task {margin-left:auto;}
-.st-key-view_switch [role="radiogroup"] {display:flex; flex-direction:row; gap:var(--paw-space-2); align-items:center;}
-.st-key-view_switch [role="radiogroup"] label {display:flex; align-items:center; margin:0;}
-@media(max-width:768px) {
- .st-key-calendar_filters [data-testid="stColumn"] {flex:1 1 40%; min-width:calc(3 * var(--paw-control) + var(--paw-space-3));}
- .st-key-week_grid [data-testid="stHorizontalBlock"] {min-width:980px;}
- .st-key-week_grid [data-testid="stColumn"] {flex:1 1 0;}
-}
-@media(max-width:480px) {
- .st-key-calendar_filters [data-testid="stColumn"]:first-child {flex-basis:100%;}
- .st-key-calendar_toolbar > [data-testid="stLayoutWrapper"]:has(> .st-key-date_navigation) {flex-basis:100%;}
-}
 .st-key-current_user button,.st-key-workspace_nav button,
 .st-key-current_user button > div,.st-key-workspace_nav button > div {justify-content:flex-start!important;}
 [data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {color:var(--paw-rail-muted);}

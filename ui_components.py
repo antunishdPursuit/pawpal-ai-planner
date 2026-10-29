@@ -3,6 +3,7 @@ from html import escape
 from base64 import b64encode
 from app_theme import favicon
 from pathlib import Path
+from calendar_presentation import CalendarItem
 import streamlit as st
 
 
@@ -39,12 +40,12 @@ def task_summary(task, pet, state, owner_name=""):
     )
 
 
-def calendar_chip(entry, pet, color):
-    at_value = entry.display_time or entry.task.time_of_day
-    at = at_value.strftime("%I:%M %p").lstrip("0") if at_value else "Anytime"
-    planned = " / planned" if entry.projected else ""
-    st.markdown(
-        f'<div class="paw-chip {color} {"projected" if entry.projected else ""}">'
-        f'<small>{escape(at + planned)}</small><strong>{escape(entry.task.title)}</strong>'
-        f'<small>{escape(pet.name + (" / " + entry.owner_name if entry.owner_name else ""))}</small></div>', unsafe_allow_html=True,
+def calendar_item(entry, pet):
+    """Keep the existing community projection and viewer-zone clock intact."""
+    at = entry.display_time if entry.display_time is not None else entry.task.time_of_day
+    return CalendarItem(
+        title=entry.task.title, minute=at.hour * 60 + at.minute if at is not None else None,
+        pet=pet.name, owner=entry.owner_name, location=entry.task.location_text,
+        tone=["", "blue", "rust"][(pet.pet_id - 1) % 3],
+        projected=entry.projected, status=entry.status,
     )

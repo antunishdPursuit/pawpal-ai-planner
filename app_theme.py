@@ -4,7 +4,9 @@ import streamlit as st
 
 
 def apply_theme():
-    st.html(Path(__file__).parent / "assets" / "app.css")
+    assets = Path(__file__).parent / "assets"
+    css = "\n".join((assets / name).read_text(encoding="utf8") for name in ("app.css", "calendar.css"))
+    st.html("<style>" + css + "</style>")
 
 
 def favicon():

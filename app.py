@@ -12,7 +12,8 @@ from planner_clock import local_today, using_timezone
 from planner_storage import PlannerStore
 from task_editor import show_editor, open_editor, cancel_editor, has_draft_content, map_search_url
 from gemini_planner import is_configured, configuration
-from ui_components import task_summary, calendar_chip, brand
+from ui_components import task_summary, calendar_item, brand
+from calendar_presentation import render_timeline
 from homepage import show_home
 
 st.set_page_config(page_title="PawPal AI Planner", page_icon=favicon(), layout="wide", initial_sidebar_state="expanded")
@@ -281,21 +282,19 @@ def calendar_workspace(store, owner, owners):
         if view == "Week":
             monday = selected - timedelta(days=selected.weekday())
             st.markdown(f'<h2 class="paw-week-title">{monday:%B %d} &ndash; {monday + timedelta(days=6):%B %d, %Y}</h2>', unsafe_allow_html=True)
+            days = [monday + timedelta(days=i) for i in range(7)]
+            columns = []
+            for day in days:
+                entries = filter_entries(community_entries(owners, day, owner.timezone, owner_id), pet_id, status)
+                columns.append([calendar_item(entry, view_owner.get_pet(entry.task.assigned_pet_id)) for entry in entries])
             with st.container(key="week_grid"):
-                for i, col in enumerate(st.columns(7, gap=None, wrap=False)):
-                    day = monday + timedelta(days=i)
-                    with col:
-                        st.button(day.strftime("%a %d"), key=f"day_{i}", on_click=select_date, args=(day,),
-                                  use_container_width=True, type="primary" if day == selected else "secondary")
-                        entries = filter_entries(community_entries(owners, day, owner.timezone, owner_id), pet_id, status)
-                        for entry in entries[:2]:
-                            pet = view_owner.get_pet(entry.task.assigned_pet_id)
-                            color = ["", "blue", "rust"][(pet.pet_id - 1) % 3]
-                            calendar_chip(entry, pet, color)
-                        if not entries:
-                            st.markdown('<div class="paw-empty-day">No tasks</div>', unsafe_allow_html=True)
-                        if len(entries) > 2:
-                            st.caption(f"+{len(entries)-2} more in agenda")
+                with st.container(key="week_header"):
+                    header = st.columns([.5] + [1] * 7, gap=None, wrap=False)
+                    header[0].markdown('<div class="paw-time-heading">Time</div>', unsafe_allow_html=True)
+                    for i, day in enumerate(days):
+                        header[i + 1].button(day.strftime("%a %d"), key=f"day_{i}", on_click=select_date, args=(day,),
+                                             use_container_width=True, type="primary" if day == selected else "secondary")
+                st.markdown(render_timeline([day.strftime("%A, %B %d") for day in days], columns), unsafe_allow_html=True)
         st.subheader(selected.strftime("%A, %B %d") + " agenda")
         if selected == local_today():
             due = filter_entries(community_entries(owners, selected, owner.timezone, owner_id)
