@@ -155,7 +155,7 @@ def open_planner():
 
 def sidebar(owner, profiles):
     with st.sidebar:
-        brand()
+        brand(lambda: navigate("Home"))
         with st.container(key="current_user"):
             if owner:
                 st.caption("CURRENT USER")
@@ -165,9 +165,6 @@ def sidebar(owner, profiles):
                 st.button("Choose user" if profiles else "Add user", on_click=navigate,
                           args=("User",), use_container_width=True)
         with st.container(key="workspace_nav"):
-            st.button("Home", icon=":material/home:", on_click=navigate, args=("Home",),
-                      key="nav_Home", use_container_width=True,
-                      type="primary" if st.session_state.page == "Home" else "secondary")
             for page, icon in (("Pets", ":material/pets:"), ("Calendar", ":material/calendar_month:")):
                 enabled = page == "User" or (owner is not None and (page == "Pets" or any(p.pet_count for p in profiles)))
                 st.button(page, icon=icon, on_click=navigate, args=(page,), key=f"nav_{page}",

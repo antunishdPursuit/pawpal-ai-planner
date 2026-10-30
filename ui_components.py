@@ -7,12 +7,11 @@ from calendar_presentation import CalendarItem
 import streamlit as st
 
 
-def brand():
+def brand(on_home):
     image = b64encode(Path(favicon()).read_bytes()).decode("ascii")
-    st.markdown(
-        '<div class="paw-brand"><img alt="" aria-hidden="true" src="data:image/png;base64,' + image +
-        '"><div><strong>PawPal</strong><small>AI Planner</small></div></div>', unsafe_allow_html=True,
-    )
+    st.button(f"![](data:image/png;base64,{image}) **PawPal** AI PLANNER",
+              key="brand_home", on_click=on_home, use_container_width=True,
+              help="Go to homepage")
 
 
 def summary(pending, overdue, done):

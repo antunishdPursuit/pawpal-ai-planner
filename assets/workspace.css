@@ -8,8 +8,6 @@ body:has(.st-key-planner_header) :is(h1,h2,h3,p,a,label,input,textarea,select,bu
 .stApp:has(.st-key-planner_header) [data-testid="stSidebar"] * {color:var(--paw-text);}
 .stApp:has(.st-key-planner_header) [data-testid="stSidebar"] :is([data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] p) {color:var(--paw-muted);}
 .stApp:has(.st-key-planner_header) [data-testid="stSidebar"] button:focus-visible {outline-color:var(--paw-primary)!important;}
-.stApp:has(.st-key-planner_header) .paw-brand {margin:var(--paw-space-2) 0 var(--paw-space-8);font-size:24px;gap:var(--paw-space-3);}
-.stApp:has(.st-key-planner_header) .paw-brand small {font-size:12px;letter-spacing:.15em;color:var(--paw-muted);text-transform:uppercase;}
 .stApp:has(.st-key-planner_header) .st-key-current_user button {background:var(--paw-selected);border:1px solid var(--paw-border);color:var(--paw-text);}
 .stApp:has(.st-key-planner_header) .st-key-workspace_nav button {min-height:52px;background:transparent;color:var(--paw-text);padding-inline:var(--paw-space-4);}
 .stApp:has(.st-key-planner_header) .st-key-workspace_nav button[kind="primary"] {background:var(--paw-primary);color:var(--paw-surface);}
@@ -97,3 +95,11 @@ body:has(.st-key-planner_header) [data-testid="stDialog"] h2 {text-align:center;
 body:has(.st-key-planner_header) [data-testid="stDialog"] h2 {display:block;width:100%;}
 body:has(.st-key-planner_header) [data-testid="stDialog"] h2 > span {display:block;width:100%;}
 body:has(.st-key-planner_header) [data-testid="stDialog"] h2 [data-testid="stMarkdownContainer"] {width:100%;text-align:center;}
+
+.st-key-brand_home {margin:var(--paw-space-2) 0 var(--paw-space-4);}
+.st-key-brand_home button {border:0;background:transparent;padding:0;justify-content:flex-start;text-align:left;}
+.st-key-brand_home button [data-testid="stMarkdownContainer"] p {display:grid;grid-template-columns:40px auto;grid-template-rows:auto auto;column-gap:var(--paw-space-3);align-items:center;font-size:12px;line-height:1.3;letter-spacing:.15em;color:var(--paw-muted);}
+.st-key-brand_home button img {grid-row:1 / span 2;width:40px;height:40px;max-height:40px!important;}
+.st-key-brand_home button strong {font-size:24px;line-height:1.3;letter-spacing:normal;color:var(--paw-text);}
+
+.st-key-brand_home button,.st-key-brand_home button > div {justify-content:flex-start!important;}
