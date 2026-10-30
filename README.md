@@ -23,6 +23,27 @@ The default model is `gemini-3.8-flash`. Set `GEMINI_MODEL` in .env to override 
 
 Dependencies are pinned to the versions verified in this build. Credentials and local database files are ignored by Git.
 
+## Optional presentation data
+
+To add fictional data to the same local database used by the app, run this once:
+
+```powershell
+python seed_demo.py
+```
+
+This adds **Alex Rivera (demo)**, **Jordan Lee (demo)** and **Sam Taylor (demo)**,
+with five pets and ten one-off tasks across **November 16–22, 2026**. Each pet
+has two tasks, and every day has at least one task. All demo users use
+America/New_York. In Calendar, select **November 18, 2026**, **Week**, **All owners**
+and **All pets** to show the full presentation week.
+
+Existing records are preserved. The whole set is saved in one transaction;
+running the command again skips a fully loaded set rather than duplicating or
+resetting it. A partial set or conflicting demo user name is refused without
+replacing records. Nothing is seeded automatically on app startup.
+For a separate database, use `python seed_demo.py --database demo.sqlite3`
+and set `PAWPAL_DB_PATH` to that file before starting Streamlit.
+
 ## Use the planner
 
 - **Current user:** click the sidebar name to choose another local user. When none exist, choose **Add user**. Select an existing user or create a name/timezone profile. The clickable current-user control in the sidebar opens this page to change users or update timezone. Names are displayed as identity, not an owner-renaming form. Switching users clears the previous user's temporary draft and conversation after a visible warning.
