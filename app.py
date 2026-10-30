@@ -271,7 +271,7 @@ def calendar_workspace(store, owner, owners):
         status_label = status_col.selectbox("Status", ["All", "Pending", "Overdue", "Done"], key="calendar_status")
         status = None if status_label == "All" else status_label.lower()
         if selected is None:
-            st.info("Choose a date to see the agenda.")
+            st.info("Choose a date to see the calendar.")
             return
         if view == "Week":
             monday = selected - timedelta(days=selected.weekday())
@@ -289,6 +289,9 @@ def calendar_workspace(store, owner, owners):
                         header[i + 1].button(day.strftime("%a %d"), key=f"day_{i}", on_click=select_date, args=(day,),
                                              use_container_width=True, type="primary" if day == selected else "secondary")
                 st.markdown(render_timeline([day.strftime("%A, %B %d") for day in days], columns), unsafe_allow_html=True)
+            if owner.pets:
+                st.caption("Dashed cards are estimated repeats. Dates can shift after completion.")
+            return
         st.subheader(selected.strftime("%A, %B %d") + " agenda")
         if selected == local_today():
             due = filter_entries(community_entries(owners, selected, owner.timezone, owner_id)
@@ -314,8 +317,6 @@ def calendar_workspace(store, owner, owners):
             task_card(store, view_owner, entry, "agenda", owner.owner_id)
         if not entries:
             st.caption("No tasks match this day and these filters.")
-        if view == "Week" and owner.pets:
-            st.caption("Dashed cards are estimated repeats. Dates can shift after completion.")
 
 
 def main():
