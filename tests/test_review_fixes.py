@@ -31,3 +31,23 @@ def test_custom_history_survives_reopen(tmp_path):
     for day in (first, first + timedelta(days=2)):
         assert len([e for e in entries_for_day(owner, day) if e.completion]) == 1
     assert len(owner.get_all_tasks()) == 1
+
+
+def test_recurring_conflicts_include_later_dates():
+    owner = Owner("Current")
+    pet = Pet("Mochi", "cat", 2)
+    owner.add_pet(pet)
+    first = date.today()
+    pet.add_task(Task("Appointment", "", pet.pet_id, one_off_due_date=first + timedelta(days=500), time_of_day=time(9)))
+    assert draft_conflicts(owner, TaskDraft(pet.pet_id, "Daily", first, time(9), "DAILY"))
+    assert not draft_conflicts(owner, TaskDraft(pet.pet_id, "Daily", first, time(10), "DAILY"))
+
+
+def test_recurrence_intersection_and_nonintersection():
+    owner = Owner("Current")
+    pet = Pet("Mochi", "cat", 2)
+    owner.add_pet(pet)
+    first = date.today()
+    pet.add_task(Task("Every four days", "", pet.pet_id, schedule=Schedule(ScheduleType.CUSTOM, first, 4), time_of_day=time(9)))
+    assert not draft_conflicts(owner, TaskDraft(pet.pet_id, "Offset", first + timedelta(days=1), time(9), "CUSTOM", 2))
+    assert draft_conflicts(owner, TaskDraft(pet.pet_id, "Overlap", first + timedelta(days=2), time(9), "CUSTOM", 6))

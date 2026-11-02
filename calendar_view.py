@@ -66,11 +66,30 @@ def day_conflicts(owner: Owner, day: date, candidate=None) -> list[str]:
 
 
 def draft_conflicts(owner, draft):
-    """Only conflicts involving this proposed time, on this proposed date."""
+    """Check exact start-time overlap across finite and recurring schedules."""
+    from math import gcd
     if draft.time_of_day is None or draft.due_date is None:
         return []
-    matching = [e.task for e in entries_for_day(owner, draft.due_date)
-                if e.status != "done" and e.task.time_of_day == draft.time_of_day]
+    step = {"NONE": 0, "DAILY": 1, "WEEKLY": 7}.get(draft.repeat, draft.interval_days)
+    matching = []
+    for task in owner.get_all_tasks():
+        if task.time_of_day != draft.time_of_day:
+            continue
+        custom = task.schedule and task.schedule.schedule_type == ScheduleType.CUSTOM
+        if task.status == "done" and not custom:
+            continue
+        anchor = task.due_date or local_today()
+        interval = task.schedule.interval if task.schedule else 0
+        def occurs(day, start, period):
+            return day >= start and ((day - start).days % period == 0 if period else day == start)
+        if not step:
+            overlap = occurs(draft.due_date, anchor, interval)
+        elif not interval:
+            overlap = occurs(anchor, draft.due_date, step)
+        else:
+            overlap = (draft.due_date - anchor).days % gcd(step, interval) == 0
+        if overlap:
+            matching.append(task)
     if not matching:
         return []
     candidate = Task(draft.title or "New task", "", draft.pet_id, task_id=0,
