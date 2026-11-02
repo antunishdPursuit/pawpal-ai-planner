@@ -51,3 +51,22 @@ def test_recurrence_intersection_and_nonintersection():
     pet.add_task(Task("Every four days", "", pet.pet_id, schedule=Schedule(ScheduleType.CUSTOM, first, 4), time_of_day=time(9)))
     assert not draft_conflicts(owner, TaskDraft(pet.pet_id, "Offset", first + timedelta(days=1), time(9), "CUSTOM", 2))
     assert draft_conflicts(owner, TaskDraft(pet.pet_id, "Overlap", first + timedelta(days=2), time(9), "CUSTOM", 6))
+
+
+def test_legacy_database_preserves_latest_completion_on_upgrade(tmp_path):
+    import sqlite3
+    from planner_storage import SCHEMA
+    path = tmp_path / "legacy.sqlite3"
+    legacy = SCHEMA[0:SCHEMA.index("CREATE TABLE IF NOT EXISTS task_completion")] + SCHEMA[SCHEMA.index("CREATE TABLE IF NOT EXISTS schedule"):]
+    with sqlite3.connect(path) as conn:
+        conn.executescript(legacy)
+        conn.execute("INSERT INTO owner VALUES (1, 'Current', 'UTC')")
+        conn.execute("INSERT INTO pet VALUES (1, 1, 'Mochi', 'cat', 2)")
+        conn.execute("INSERT INTO task VALUES (1, 1, 'Feed', '', NULL, '09:00:00', '2026-11-01', '', NULL)")
+        conn.execute("INSERT INTO schedule VALUES (1, 'CUSTOM', '2026-11-01', 2, '2026-11-03')")
+    store = PlannerStore(path, owner_id=1)
+    owner = store.load()
+    assert owner.get_all_tasks()[0].completion_dates == [date(2026, 11, 1)]
+    with patch("pawpal_system.local_today", return_value=date(2026, 11, 3)), patch("planner_clock.local_today", return_value=date(2026, 11, 3)):
+        store.complete_task(1)
+    assert PlannerStore(path, owner_id=1).load().get_all_tasks()[0].completion_dates == [date(2026, 11, 1), date(2026, 11, 3)]
