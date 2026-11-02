@@ -36,7 +36,7 @@ def entries_for_day(owner: Owner, day: date) -> list[CalendarEntry]:
     entries = []
     for task in owner.get_all_tasks():
         custom = task.schedule and task.schedule.schedule_type == ScheduleType.CUSTOM
-        if task.last_completed_date == day:
+        if task.last_completed_date == day or day in task.completion_dates:
             entries.append(CalendarEntry(task, day, completion=True))
             if not custom:
                 continue

@@ -28,6 +28,10 @@ CREATE TABLE IF NOT EXISTS task (
  time_of_day TEXT, last_completed_date TEXT, location_text TEXT NOT NULL,
  creation_request_id TEXT UNIQUE
 );
+CREATE TABLE IF NOT EXISTS task_completion (
+ task_id INTEGER NOT NULL REFERENCES task(task_id), completed_date TEXT NOT NULL,
+ PRIMARY KEY(task_id, completed_date)
+);
 CREATE TABLE IF NOT EXISTS schedule (
  task_id INTEGER PRIMARY KEY REFERENCES task(task_id),
  schedule_type TEXT NOT NULL CHECK(schedule_type IN ('DAILY','WEEKLY','CUSTOM')),
@@ -160,6 +164,10 @@ class PlannerStore:
                 one_off_due_date=_date(r["one_off_due_date"]), location_text=r["location_text"],
                 creation_request_id=r["creation_request_id"],
             )
+            task.completion_dates = [date.fromisoformat(row[0]) for row in conn.execute(
+                "SELECT completed_date FROM task_completion WHERE task_id=? ORDER BY completed_date", (task.task_id,))]
+            if task.last_completed_date and task.last_completed_date not in task.completion_dates:
+                task.completion_dates.append(task.last_completed_date)
             _task_ids.reserve(task.task_id)
             pet.add_task(task)
         return owner
@@ -180,6 +188,9 @@ class PlannerStore:
     def _save(self, conn, owner: Owner):
         # Replace only this owner's aggregate atomically, under a write lock.
         # Other local users and concurrent readers retain their complete state.
+        conn.execute("DELETE FROM task_completion WHERE task_id IN "
+                     "(SELECT t.task_id FROM task t JOIN pet p ON p.pet_id=t.pet_id WHERE p.owner_id=?)",
+                     (owner.owner_id,))
         conn.execute("DELETE FROM schedule WHERE task_id IN "
                      "(SELECT t.task_id FROM task t JOIN pet p ON p.pet_id=t.pet_id WHERE p.owner_id=?)",
                      (owner.owner_id,))
@@ -199,6 +210,8 @@ class PlannerStore:
                     _iso(task.one_off_due_date), _iso(task.time_of_day),
                     _iso(task.last_completed_date), task.location_text, task.creation_request_id,
                 ))
+                for completed in sorted(set(task.completion_dates + ([task.last_completed_date] if task.last_completed_date else []))):
+                    conn.execute("INSERT INTO task_completion VALUES (?, ?)", (task.task_id, completed.isoformat()))
                 if task.schedule:
                     s = task.schedule
                     conn.execute("INSERT INTO schedule VALUES (?, ?, ?, ?, ?)", (

@@ -67,6 +67,7 @@ class Task:
     one_off_due_date: Optional[date] = None
     location_text: str = ""
     creation_request_id: Optional[str] = None
+    completion_dates: list[date] = field(default_factory=list)
 
     @property
     def due_date(self) -> Optional[date]:
@@ -94,7 +95,11 @@ class Task:
         """
         if self.status == "done":
             return False
+        if self.last_completed_date is not None and self.last_completed_date not in self.completion_dates:
+            self.completion_dates.append(self.last_completed_date)
         self.last_completed_date = local_today()
+        if self.last_completed_date not in self.completion_dates:
+            self.completion_dates.append(self.last_completed_date)
         if self.schedule and self.schedule.schedule_type == ScheduleType.CUSTOM:
             self.schedule.next_due_date = local_today() + timedelta(days=self.schedule.interval)
         return True
