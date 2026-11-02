@@ -22,6 +22,7 @@ def button(app, label):
 def test_week_navigation_moves_seven_days_and_has_no_today_button():
     app = calendar_app()
     assert not app.exception
+    assert app.date_input(key="selected_day").label == "Selected week"
     assert "Today" not in [item.label for item in app.button]
     button(app, "Next week").click().run()
     assert app.session_state.selected_day == date(2026, 11, 13)
@@ -30,10 +31,12 @@ def test_week_navigation_moves_seven_days_and_has_no_today_button():
     assert not app.exception
 
 
-def test_empty_agenda_keeps_full_day_timeline_and_day_navigation():
+def test_empty_day_keeps_full_day_timeline_and_day_navigation():
     app = calendar_app()
-    app.radio(key="calendar_view").set_value("Agenda").run()
+    app.radio(key="calendar_view").set_value("Day").run()
     assert not app.exception
+    assert app.date_input(key="selected_day").label == "Selected day"
+    assert app.session_state.selected_day == date(2026, 11, 6)
     assert not app.subheader
     assert any("Friday, November 06" in item.value for item in app.markdown)
     assert any("No tasks match" in item.value for item in app.caption)
@@ -45,5 +48,7 @@ def test_empty_agenda_keeps_full_day_timeline_and_day_navigation():
     button(app, "Previous day").click().run()
     assert app.session_state.selected_day == date(2026, 11, 6)
     app.radio(key="calendar_view").set_value("Week").run()
+    assert app.date_input(key="selected_day").label == "Selected week"
+    assert app.session_state.selected_day == date(2026, 11, 6)
     assert "Next week" in [item.label for item in app.button]
     assert not app.exception

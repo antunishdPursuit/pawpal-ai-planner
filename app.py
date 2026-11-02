@@ -253,8 +253,8 @@ def calendar_workspace(store, owner, owners):
                 st.button(f"Previous {unit}", on_click=select_date, args=(selected - step,))
                 st.button(f"Next {unit}", on_click=select_date, args=(selected + step,))
             with st.container(key="view_switch", width="content"):
-                view = st.radio("Calendar view", ["Week", "Agenda"], index=0, horizontal=True, label_visibility="collapsed", key="calendar_view")
-            if view == "Agenda":
+                view = st.radio("Calendar view", ["Week", "Day"], index=0, horizontal=True, label_visibility="collapsed", key="calendar_view")
+            if view == "Day":
                 st.markdown(f"**{selected:%A, %B %d}**", width="content")
             st.button("Add task", type="primary", key="add_task", on_click=open_editor,
                       args=(chosen_pet, selected, "Conversation"), disabled=not owner.pets,
@@ -267,7 +267,7 @@ def calendar_workspace(store, owner, owners):
         pets = [p for profile in owners if owner_id is None or profile.owner_id == owner_id for p in profile.pets]
         if st.session_state.get("calendar_pet") not in [None] + [p.pet_id for p in pets]:
             st.session_state.calendar_pet = None
-        selected = date_col.date_input("Selected day", value=None if "selected_day" in st.session_state else selected, key="selected_day", on_change=remember_date)
+        selected = date_col.date_input("Selected week" if view == "Week" else "Selected day", value=None if "selected_day" in st.session_state else selected, key="selected_day", on_change=remember_date)
         pet_id = pet_col.selectbox("Pet", [None] + [p.pet_id for p in pets],
                                   format_func=lambda value: "All pets" if value is None else (
                                       view_owner.get_pet(value).name + " / " + next(p.name for p in owners if p.find_pet(value))),
@@ -368,7 +368,7 @@ def main():
             st.session_state.calendar_owner = owner.owner_id
             st.session_state.calendar_pet = target["pet_id"]
             st.session_state.calendar_status = "All"
-            st.session_state.calendar_view = "Agenda"
+            st.session_state.calendar_view = "Day"
         if "pending_selected_day" in st.session_state:
             select_date(st.session_state.pop("pending_selected_day"))
         if page == "Pets":
