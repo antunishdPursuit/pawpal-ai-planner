@@ -70,3 +70,13 @@ def test_legacy_database_preserves_latest_completion_on_upgrade(tmp_path):
     with patch("pawpal_system.local_today", return_value=date(2026, 11, 3)), patch("planner_clock.local_today", return_value=date(2026, 11, 3)):
         store.complete_task(1)
     assert PlannerStore(path, owner_id=1).load().get_all_tasks()[0].completion_dates == [date(2026, 11, 1), date(2026, 11, 3)]
+
+
+def test_overdue_recurrence_conflicts_match_calendar_projection():
+    owner = Owner("Current")
+    pet = Pet("Mochi", "cat", 2)
+    owner.add_pet(pet)
+    today = date.today()
+    pet.add_task(Task("Weekly", "", pet.pet_id, schedule=Schedule(ScheduleType.WEEKLY, today - timedelta(days=1)), time_of_day=time(9)))
+    assert draft_conflicts(owner, TaskDraft(pet.pet_id, "Overlap", today + timedelta(days=7), time(9)))
+    assert not draft_conflicts(owner, TaskDraft(pet.pet_id, "Free", today + timedelta(days=6), time(9)))

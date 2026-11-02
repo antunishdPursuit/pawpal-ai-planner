@@ -80,14 +80,20 @@ def draft_conflicts(owner, draft):
             continue
         anchor = task.due_date or local_today()
         interval = task.schedule.interval if task.schedule else 0
-        def occurs(day, start, period):
-            return day >= start and ((day - start).days % period == 0 if period else day == start)
-        if not step:
-            overlap = occurs(draft.due_date, anchor, interval)
-        elif not interval:
-            overlap = occurs(anchor, draft.due_date, step)
-        else:
-            overlap = (draft.due_date - anchor).days % gcd(step, interval) == 0
+        def sequences(start, period):
+            # Match the calendar: the due date plus projected future dates.
+            return [(start, 0)] + ([(max(start, local_today()) + timedelta(days=period), period)] if period else [])
+        def intersects(a, n, b, m):
+            if not n and not m:
+                return a == b
+            if not n:
+                return a >= b and (a - b).days % m == 0
+            if not m:
+                return b >= a and (b - a).days % n == 0
+            return (a - b).days % gcd(n, m) == 0
+        overlap = any(intersects(a, n, b, m)
+                      for a, n in sequences(draft.due_date, step)
+                      for b, m in sequences(anchor, interval))
         if overlap:
             matching.append(task)
     if not matching:
