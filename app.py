@@ -247,11 +247,15 @@ def calendar_workspace(store, owner, owners):
     with st.container(key="calendar_surface"):
         with st.container(horizontal=True, vertical_alignment="center", key="calendar_toolbar"):
             with st.container(horizontal=True, wrap=False, vertical_alignment="center", width="content", key="date_navigation"):
-                st.button("Previous day", on_click=select_date, args=(selected - timedelta(days=1),))
-                st.button("Today", on_click=select_date, args=(local_today(),))
-                st.button("Next day", on_click=select_date, args=(selected + timedelta(days=1),))
+                weekly = st.session_state.get("calendar_view", "Week") == "Week"
+                step = timedelta(days=7 if weekly else 1)
+                unit = "week" if weekly else "day"
+                st.button(f"Previous {unit}", on_click=select_date, args=(selected - step,))
+                st.button(f"Next {unit}", on_click=select_date, args=(selected + step,))
             with st.container(key="view_switch", width="content"):
                 view = st.radio("Calendar view", ["Week", "Agenda"], index=0, horizontal=True, label_visibility="collapsed", key="calendar_view")
+            if view == "Agenda":
+                st.markdown(f"**{selected:%A, %B %d}**", width="content")
             st.button("Add task", type="primary", key="add_task", on_click=open_editor,
                       args=(chosen_pet, selected, "Conversation"), disabled=not owner.pets,
                       help="Add a pet first" if not owner.pets else None)
@@ -292,7 +296,6 @@ def calendar_workspace(store, owner, owners):
             if owner.pets:
                 st.caption("Dashed cards are estimated repeats. Dates can shift after completion.")
             return
-        st.subheader(selected.strftime("%A, %B %d") + " agenda")
         if selected == local_today():
             due = filter_entries(community_entries(owners, selected, owner.timezone, owner_id)
                                  + community_overdue(owners, owner.timezone, owner_id), pet_id)
@@ -313,10 +316,14 @@ def calendar_workspace(store, owner, owners):
         entries = filter_entries(community_entries(owners, selected, owner.timezone, owner_id), pet_id, status)
         if selected == local_today():
             entries = [e for e in entries if e.status != "overdue"]
-        for entry in entries:
-            task_card(store, view_owner, entry, "agenda", owner.owner_id)
         if not entries:
             st.caption("No tasks match this day and these filters.")
+        with st.container(key="day_grid"):
+            items = [calendar_item(entry, view_owner.get_pet(entry.task.assigned_pet_id)) for entry in entries]
+            st.markdown(render_timeline([selected.strftime("%A, %B %d")], [items],
+                                        start_hour=0, end_hour=24), unsafe_allow_html=True)
+        for entry in entries:
+            task_card(store, view_owner, entry, "agenda", owner.owner_id)
 
 
 def main():
