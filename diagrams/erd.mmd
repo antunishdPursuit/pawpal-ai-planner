@@ -2,6 +2,7 @@ erDiagram
     OWNER ||--o{ PET : owns
     PET ||--o{ TASK : has
     TASK ||--o| SCHEDULE : repeats_with
+    TASK ||--o{ TASK_COMPLETION : records
     OWNER {
         int owner_id PK
         string name
@@ -31,4 +32,8 @@ erDiagram
         date start_date
         int interval_days
         date next_due_date
+    }
+    TASK_COMPLETION {
+        int task_id PK, FK
+        date completed_date PK
     }

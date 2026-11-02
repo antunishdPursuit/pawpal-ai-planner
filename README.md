@@ -8,7 +8,7 @@ The planner combines persistent local storage, a shared calendar, and Gemini-ass
 
 - Organize pets and care tasks across local profiles in a shared calendar.
 - Create tasks manually, by typing a request, or through dictation and live conversation.
-- Review and edit the pet, date, time, recurrence, and location before saving. Ambiguous requests prompt clarification; conflicting times require confirmation.
+- Review and edit the pet, date, time, recurrence, and location before saving. Ambiguous requests prompt clarification; conflicting start times across future recurrences require confirmation.
 - Keep profiles, pets, tasks, and completion history in local SQLite storage.
 
 ## Run locally
@@ -38,6 +38,8 @@ Gemini turns a request into a structured proposal. Local code validates the fiel
 
 PawPal AI Planner connects owners, pets, tasks, schedules, the Gemini planner, and local storage.
 
+#### Care and scheduling
+
 ```mermaid
 classDiagram
     class ScheduleType {
@@ -62,11 +64,12 @@ classDiagram
         +Schedule schedule
         +time time_of_day
         +date last_completed_date
+        +list~date~ completion_dates
         +date one_off_due_date
         +str location_text
         +str creation_request_id
         +date due_date
-        +status str
+        +str status
         +mark_complete() bool
         +update_task(title, description, schedule)
         +next_occurrence() Task
@@ -105,6 +108,21 @@ classDiagram
         +detect_conflicts(tasks, pets) list~str~$
         +filter_tasks(tasks, status, pet_name, pets) list~Task~$
     }
+    Owner "1" --> "0..*" Pet : owns
+    Pet "1" --> "0..*" Task : stores occurrences
+    Task "1" --> "0..1" Schedule : follows
+    Schedule --> ScheduleType : uses
+    Scheduler ..> Owner : reads get_all_tasks
+    Scheduler ..> Pet : adds next occurrence
+    Scheduler ..> Task : schedules
+    note for Task "schedule, time_of_day, and last_completed_date can be None. Completed daily/weekly occurrences stay done."
+    note for Schedule "CUSTOM routines advance in place; DAILY and WEEKLY create new Task occurrences through Scheduler."
+```
+
+#### AI planning and storage
+
+```mermaid
+classDiagram
     class TaskDraft {
         +int pet_id
         +str title
@@ -148,15 +166,6 @@ classDiagram
     PlannerStore ..> Owner : loads and saves
     PlannerStore ..> LocalProfile : lists
     PlannerStore ..> Task : creates and completes
-    Owner "1" --> "0..*" Pet : owns
-    Pet "1" --> "0..*" Task : stores occurrences
-    Task "1" --> "0..1" Schedule : follows
-    Schedule --> ScheduleType : uses
-    Scheduler ..> Owner : reads get_all_tasks
-    Scheduler ..> Pet : adds next occurrence
-    Scheduler ..> Task : schedules
-    note for Task "schedule, time_of_day, and last_completed_date can be None. Completed daily/weekly occurrences stay done."
-    note for Schedule "CUSTOM routines advance in place; DAILY and WEEKLY create new Task occurrences through Scheduler."
 ```
 
 

@@ -10,8 +10,8 @@ The planner sends the request, bounded conversation history, registered pet deta
 
 - The recorded examples are in English. Other languages, dialects, abbreviations, ambiguous names, and date conventions may lead to incorrect proposals or unnecessary clarification.
 - A valid output structure does not prove the model understood the request. Review the pet, date, time, recurrence, and location before saving.
-- Supported recurrences are daily, weekly, and every-N-days; more complex patterns need clarification. Conflict checks compare exact start times, not duration or travel time.
-- The model sees only bounded task context, not the complete history. Planned recurring dates can shift after late completion.
+- Supported recurrences are daily, weekly, and every-N-days; more complex patterns need clarification. Conflict checks compare exact start times across recurring dates, not duration or travel time.
+- The model sees only bounded task context, not the complete history. Planned recurring dates can shift after late completion. Completion dates are retained for custom routines as well as daily and weekly tasks. Older custom completions overwritten before this change cannot be recovered.
 - Local profiles are not authenticated accounts: anyone using the app on the device can select a profile. There is no cloud sync.
 - The app is not a veterinary advice service. It can record an owner-provided reminder but should not recommend diagnoses, treatments, or doses.
 - Speech recognition can mishear names. Echo, interruptions, and broader device, language, and accessibility coverage have not been systematically evaluated.

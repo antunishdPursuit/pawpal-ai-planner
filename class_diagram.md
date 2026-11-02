@@ -26,11 +26,12 @@ classDiagram
         +Schedule schedule
         +time time_of_day
         +date last_completed_date
+        +list~date~ completion_dates
         +date one_off_due_date
         +str location_text
         +str creation_request_id
         +date due_date
-        +status str
+        +str status
         +mark_complete() bool
         +update_task(title, description, schedule)
         +next_occurrence() Task
