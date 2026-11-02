@@ -2,7 +2,7 @@
 
 ## Purpose and model
 
-PawPal AI Planner extends PawPal+ with local pet-care scheduling and Gemini-assisted task creation. Gemini 3.8 Flash supports typed proposals and dictation; Gemini 3.8 Live supports spoken conversation. A person reviews and confirms each task before it is saved. The project does not train or fine-tune a model.
+PawPal AI Planner provides local pet-care scheduling and Gemini-assisted task creation. Gemini 3.8 Flash supports typed proposals and dictation; Gemini 3.8 Live supports spoken conversation. A person reviews and confirms each task before it is saved. The project does not train or fine-tune a model.
 
 The planner sends the request, bounded conversation history, registered pet details, selected profile's local date and timezone, and a limited set of unfinished tasks to Gemini. Voice audio is sent to Gemini for voice features. The API key stays server-side; task records are stored locally in SQLite.
 
@@ -36,10 +36,10 @@ Three live Gemini cases using fictional pets and a disposable database were chec
 
 A separate browser check confirmed a generated preview, save, and database readback. Synthetic speech checks exercised dictation and a spoken-confirmation save. Dictation initially heard “Mochi” as “Machi”; a registered-name hint produced “Mochi” on a follow-up. This illustrates why transcripts and task details remain reviewable.
 
-The six original tests passed in the recorded checks. Additional temporary checks exercised invalid responses, provider failures, conflicts, duplicate confirmation, persistence, and rollback. These observations are a small manual evaluation, not a general accuracy or safety benchmark. Simulated failures and synthetic speech are distinct from live model and browser checks.
+Six domain tests passed in the recorded checks. Additional temporary checks exercised invalid responses, provider failures, conflicts, duplicate confirmation, persistence, and rollback. These observations are a small manual evaluation, not a general accuracy or safety benchmark. Simulated failures and synthetic speech are distinct from live model and browser checks.
 
 ## Collaboration with AI
 
-AI assisted with examining the base project, proposing the data flow, implementation, and testing. One accepted suggestion separated model proposals from validation and storage, so a model response cannot save a task without review and confirmation.
+AI assisted with designing the data flow, implementation, and testing. One accepted suggestion separated model proposals from validation and storage, so a model response cannot save a task without review and confirmation.
 
 An initial AI suggestion opened the experience on the calendar. That design was revised to introduce users and pets first, because selecting a profile and registering a pet are prerequisites for a useful care task. The resulting User → Pets → Calendar flow makes those steps clearer.

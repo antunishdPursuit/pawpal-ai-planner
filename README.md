@@ -2,7 +2,7 @@
 
 PawPal AI Planner is a local pet-care calendar that turns a typed or spoken request into a task you can review and save. Create a profile and pets, plan care on a shared calendar, and confirm the details before the app writes anything.
 
-It extends [PawPal+](https://github.com/antunishdPursuit-coursework-archive/ai110-module2show-pawpal-starter), an AI110 project for registering pets, scheduling recurring care, and viewing daily tasks. This version adds persistent local storage, a calendar, and Gemini-assisted planning with validation and human confirmation.
+The planner combines persistent local storage, a shared calendar, and Gemini-assisted task planning with validation and human confirmation.
 
 ## What it does
 
@@ -194,7 +194,7 @@ python -B -m pytest -p no:cacheprovider -q
 node --test tests/homepage.test.cjs tests/voice.test.cjs
 ```
 
-The six original tests passed in the recorded checks. The three live scenarios above and a browser preview, confirmation, and database readback were also checked with temporary data. They are a small evaluation, not an accuracy or safety benchmark. The [model card](model_card.md) describes the evaluation, limitations, and AI collaboration in more detail.
+Six domain tests passed in the recorded checks. The three live scenarios above and a browser preview, confirmation, and database readback were also checked with temporary data. They are a small evaluation, not an accuracy or safety benchmark. The [model card](model_card.md) describes the evaluation, limitations, and AI collaboration in more detail.
 
 Local profiles are not authentication: anyone using the app on the device can select a profile. Task data stays in local SQLite; AI requests and voice audio are sent to Gemini. The app does not provide veterinary advice, cloud sync, or reminders. Review AI-generated details before saving.
 

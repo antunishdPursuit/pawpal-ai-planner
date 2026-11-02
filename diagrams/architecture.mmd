@@ -21,7 +21,7 @@ flowchart TD
     Clarify --> Conversation
     Validator --> Preview[Editable task preview]
     Preview --> Confirm{Owner confirms?}
-    Confirm -->|keep draft| UI
+    Confirm -->|close without saving| UI
     Confirm -->|yes| Service[Validate current owner and save once]
     Service --> Domain[Owner / Pet / Task / Scheduler]
     Domain --> Store
