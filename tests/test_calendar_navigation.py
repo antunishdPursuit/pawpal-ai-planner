@@ -23,6 +23,9 @@ def test_week_navigation_moves_seven_days_and_has_no_today_button():
     app = calendar_app()
     assert not app.exception
     assert app.date_input(key="selected_day").label == "Selected week"
+    assert not app.subheader
+    assert any("November 02 – November 08, 2026" in item.value for item in app.markdown)
+    assert not any("paw-week-title" in item.value for item in app.markdown)
     assert "Today" not in [item.label for item in app.button]
     button(app, "Next week").click().run()
     assert app.session_state.selected_day == date(2026, 11, 13)

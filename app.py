@@ -255,7 +255,11 @@ def calendar_workspace(store, owner, owners):
             with st.container(key="view_switch", width="content"):
                 view = st.radio("Calendar view", ["Week", "Day"], index=0, horizontal=True, label_visibility="collapsed", key="calendar_view")
             if view == "Day":
-                st.markdown(f"**{selected:%A, %B %d}**", width="content")
+                period_label = selected.strftime("%A, %B %d")
+            else:
+                week_start = selected - timedelta(days=selected.weekday())
+                period_label = f"{week_start:%B %d} – {week_start + timedelta(days=6):%B %d, %Y}"
+            st.markdown(f"**{period_label}**", width="content")
             st.button("Add task", type="primary", key="add_task", on_click=open_editor,
                       args=(chosen_pet, selected, "Conversation"), disabled=not owner.pets,
                       help="Add a pet first" if not owner.pets else None)
@@ -279,7 +283,6 @@ def calendar_workspace(store, owner, owners):
             return
         if view == "Week":
             monday = selected - timedelta(days=selected.weekday())
-            st.markdown(f'<h2 class="paw-week-title">{monday:%B %d} &ndash; {monday + timedelta(days=6):%B %d, %Y}</h2>', unsafe_allow_html=True)
             days = [monday + timedelta(days=i) for i in range(7)]
             columns = []
             for day in days:
