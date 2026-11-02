@@ -21,6 +21,10 @@ classDiagram
         +Schedule schedule
         +time time_of_day
         +date last_completed_date
+        +date one_off_due_date
+        +str location_text
+        +str creation_request_id
+        +date due_date
         +status str
         +mark_complete() bool
         +update_task(title, description, schedule)
@@ -42,6 +46,7 @@ classDiagram
     class Owner {
         +int owner_id
         +str name
+        +str timezone
         +list~Pet~ pets
         +add_pet(pet)
         +remove_pet(pet_id)
@@ -59,6 +64,49 @@ classDiagram
         +detect_conflicts(tasks, pets) list~str~$
         +filter_tasks(tasks, status, pet_name, pets) list~Task~$
     }
+    class TaskDraft {
+        +int pet_id
+        +str title
+        +date due_date
+        +time time_of_day
+        +str repeat
+        +int interval_days
+        +str description
+        +str location
+        +str request_id
+        +validate(owner) TaskDraft
+    }
+    class GeminiPlanner {
+        +propose(request, owner, history) PlannerResult
+    }
+    class PlannerResult {
+        +str kind
+        +str message
+        +TaskDraft draft
+    }
+    class PlannerStore {
+        +list_profiles() list~LocalProfile~
+        +load() Owner
+        +load_community() list~Owner~
+        +create_profile(name, timezone) Owner
+        +add_pet(name, species, age) Pet
+        +create_task(draft, allow_conflicts) Task
+        +complete_task(task_id) tuple
+    }
+    class LocalProfile {
+        +int owner_id
+        +str name
+        +str timezone
+        +int pet_count
+    }
+    GeminiPlanner ..> Owner : uses context
+    GeminiPlanner ..> PlannerResult : returns
+    PlannerResult --> TaskDraft : contains
+    TaskDraft ..> Owner : validates against
+    PlannerStore ..> TaskDraft : validates and saves
+    PlannerStore ..> Owner : loads and saves
+    PlannerStore ..> LocalProfile : lists
+    PlannerStore ..> Task : creates and completes
     Owner "1" --> "0..*" Pet : owns
     Pet "1" --> "0..*" Task : stores occurrences
     Task "1" --> "0..1" Schedule : follows
