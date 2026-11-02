@@ -38,7 +38,7 @@ Gemini turns a request into a structured proposal. Local code validates the fiel
 
 PawPal AI Planner connects owners, pets, tasks, schedules, the Gemini planner, and local storage.
 
-#### Care and scheduling
+#### Pets, tasks, and recurring schedules
 
 ```mermaid
 classDiagram
@@ -119,7 +119,7 @@ classDiagram
     note for Schedule "CUSTOM routines advance in place; DAILY and WEEKLY create new Task occurrences through Scheduler."
 ```
 
-#### AI planning and storage
+#### From an AI request to a saved task
 
 ```mermaid
 classDiagram
