@@ -4,7 +4,7 @@
 
 PawPal AI Planner provides local pet-care scheduling and Gemini-assisted task creation. Gemini 3.8 Flash supports typed proposals and dictation; Gemini 3.8 Live supports spoken conversation. A person reviews and confirms each task before it is saved. The project does not train or fine-tune a model.
 
-The planner sends the request, bounded conversation history, registered pet details, selected profile's local date and timezone, and a limited set of unfinished tasks to Gemini. Voice audio is sent to Gemini for voice features. The API key stays server-side; task records are stored locally in SQLite.
+The planner sends the request, bounded conversation history, registered pet details, selected profile's local date and timezone, and a limited set of unfinished tasks to Gemini. Live voice also sends the selected profile name and ID and pet species; other local profiles are excluded. Voice audio is sent to Gemini for voice features. The API key stays server-side; task records are stored locally in SQLite.
 
 ## Limitations and biases
 

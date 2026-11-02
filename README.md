@@ -196,7 +196,7 @@ node --test tests/homepage.test.cjs tests/voice.test.cjs
 
 Six domain tests passed in the recorded checks. The three live scenarios above and a browser preview, confirmation, and database readback were also checked with temporary data. They are a small evaluation, not an accuracy or safety benchmark. The [model card](model_card.md) describes the evaluation, limitations, and AI collaboration in more detail.
 
-Local profiles are not authentication: anyone using the app on the device can select a profile. Task data stays in local SQLite; AI requests and voice audio are sent to Gemini. The app does not provide veterinary advice, cloud sync, or reminders. Review AI-generated details before saving.
+Local profiles are not authentication: anyone using the app on the device can select a profile. Task records are stored in local SQLite. AI requests include the current user's bounded pet and task context; live voice also sends the current profile name/ID and audio. Other profiles are excluded. The app does not provide veterinary advice, cloud sync, or reminders. Review AI-generated details before saving.
 
 ## Credits
 

@@ -19,7 +19,6 @@ def live_config(owner, profiles, history=None):
     context = {
         "current_user": {"name": owner.name, "owner_id": owner.owner_id},
         "today": today, "timezone": owner.timezone,
-        "users": [{"name": p.name, "pet_count": p.pet_count} for p in profiles[:25]],
         "pets": [{"pet_id": p.pet_id, "name": p.name, "species": p.species} for p in owner.pets[:50]],
         "unfinished_tasks": [{"pet_id": t.assigned_pet_id, "title": t.title,
                               "due_date": t.due_date.isoformat() if t.due_date else None,
@@ -38,7 +37,8 @@ def live_config(owner, profiles, history=None):
 You are speaking as PawPal. Keep spoken answers short and natural.
 The selected current user is already known; do not repeatedly ask their name.
 Greet them briefly, then ask what to plan. If there is one pet, use it when
-unambiguous. You may describe how many local users/pets exist when asked.
+unambiguous. Discuss only the selected user and their pets and tasks.
+Do not disclose or speculate about other local profiles.
 Only plan for the CURRENT user's registered pets. If another user is requested,
 ask them to change user in the sidebar. You cannot switch users or register pets.
 Ask for missing date, pet, or AM/PM. When the task is clear, call preview_task

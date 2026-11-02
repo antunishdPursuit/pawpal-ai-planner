@@ -230,7 +230,7 @@ def show_editor(store, owner):
                         key="entry_mode", on_change=entry_mode_changed, label_visibility="collapsed")
         activate_entry_mode(mode)
         if mode == "Conversation":
-            conversation_input(store, owner, store.list_profiles())
+            conversation_input(store, owner, [])
         elif st.session_state.get("task_draft") is None:
             st.session_state.task_draft = TaskDraft(st.session_state.get("editor_pet_id") or owner.pets[0].pet_id, "",
                                                     st.session_state.get("editor_day") or local_today())
