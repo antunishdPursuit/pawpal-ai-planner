@@ -9,7 +9,6 @@ from calendar_view import draft_conflicts
 from planner_clock import local_today
 from task_contract import TaskDraft
 from gemini_planner import GeminiPlanner, PlannerError, is_configured
-from voice_ui import render_voice
 from app_theme import favicon
 from voice_telemetry import record_voice_event
 
@@ -170,7 +169,6 @@ def conversation_input(store, owner, profiles):
     if has_draft_content(draft):
         replace_allowed = st.checkbox("Replace my current draft with a new preview",
                                       key=f"replace_{draft.request_id}")
-    render_voice(store, owner, profiles, replace_allowed)
     if st.button("Create task preview", type="primary", use_container_width=True, disabled=not replace_allowed):
         if not request.strip():
             st.error("Describe the task you would like to plan.")

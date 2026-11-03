@@ -10,7 +10,7 @@ from calendar_view import CalendarEntry, entries_for_day, filter_entries, commun
 from pawpal_system import Scheduler
 from planner_clock import local_today, using_timezone
 from planner_storage import PlannerStore
-from task_editor import show_editor, open_editor, close_editor, cancel_editor, has_unsaved_draft, map_search_url
+from task_editor import show_editor, open_editor, close_editor, cancel_editor, has_unsaved_draft, map_search_url, snapshot_current_draft, remember_active_draft
 from gemini_planner import is_configured, configuration
 from ui_components import task_summary, calendar_item, brand, planner_header, pet_identity, task_state
 from calendar_presentation import render_timeline
@@ -276,8 +276,9 @@ def calendar_workspace(store, owner, owners):
         if st.session_state.get("calendar_pet") not in [None] + [p.pet_id for p in pets]:
             st.session_state.calendar_pet = None
         if view == "Day":
-            selected = date_col.date_input("Selected day", value=selected,
-                                           key="calendar_day_picker", on_change=remember_date, args=("calendar_day_picker",))
+            date_options = {} if "calendar_day_picker" in st.session_state else {"value": selected}
+            selected = date_col.date_input("Selected day", key="calendar_day_picker",
+                                           on_change=remember_date, args=("calendar_day_picker",), **date_options)
         pet_id = pet_col.selectbox("Pet", [None] + [p.pet_id for p in pets],
                                   format_func=lambda value: "All pets" if value is None else (
                                       view_owner.get_pet(value).name + " / " + next(p.name for p in owners if p.find_pet(value))),
@@ -336,8 +337,36 @@ def calendar_workspace(store, owner, owners):
             task_card(store, view_owner, entry, "agenda", owner.owner_id)
 
 
+def assistant_navigate(route):
+    if not route:
+        return
+    target = route.get("owner_id", st.session_state.get("active_owner_id"))
+    current = st.session_state.get("active_owner_id")
+    if target != current:
+        snapshot_current_draft()
+        remember_active_draft()
+        keys = ("task_draft", "manual_draft", "conversation_draft", "draft_mode", "entry_mode",
+                "conversation", "pending_request", "editor_day", "editor_pet_id", "planner_error",
+                "preview_blocked", "composer_count")
+        drafts = st.session_state.setdefault("assistant_editor_drafts", {})
+        drafts[current] = {key: st.session_state[key] for key in keys if key in st.session_state}
+        activate_profile(target)
+        for key, value in drafts.get(target, {}).items():
+            st.session_state[key] = value
+    st.session_state.editor_open = False
+    st.session_state.pet_dialog_open = False
+    st.session_state.page = route["page"]
+    if route["page"] == "Calendar":
+        st.session_state.calendar_pet = route.get("pet_id")
+        st.session_state.calendar_status = "All"
+        st.session_state.calendar_view = "Day"
+        if route.get("day"):
+            from datetime import date
+            select_date(date.fromisoformat(route["day"]))
+
+
 def main():
-    render_assistant()
+    assistant_navigate(render_assistant())
     try:
         root_store = PlannerStore()
         profiles = root_store.list_profiles()
