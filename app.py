@@ -33,7 +33,6 @@ def pet_calendar(pet_id):
 def select_date(day):
     st.session_state.calendar_date = day
     st.session_state.selected_day = day
-    st.session_state.calendar_week_picker = day
     st.session_state.calendar_day_picker = day
 
 
@@ -275,9 +274,6 @@ def calendar_workspace(store, owner, owners):
             st.session_state.calendar_pet = None
         if view == "Week":
             date_col.text_input("Selected week", value=period_label, disabled=True)
-            with date_col.popover("Choose week", use_container_width=True):
-                selected = st.date_input("Choose a day in the week", value=selected,
-                                         key="calendar_week_picker", on_change=remember_date, args=("calendar_week_picker",))
         else:
             selected = date_col.date_input("Selected day", value=selected,
                                            key="calendar_day_picker", on_change=remember_date, args=("calendar_day_picker",))

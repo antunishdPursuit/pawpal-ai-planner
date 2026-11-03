@@ -27,6 +27,8 @@ def test_week_navigation_moves_seven_days_and_has_no_today_button():
     assert not app.subheader
     assert any("November 02 – November 08, 2026" in item.value for item in app.markdown)
     assert not any("paw-week-title" in item.value for item in app.markdown)
+    assert not app.date_input
+    assert "Choose week" not in [item.label for item in app.button]
     assert "Today" not in [item.label for item in app.button]
     button(app, "Next week").click().run()
     assert app.session_state.selected_day == date(2026, 11, 13)
@@ -60,9 +62,11 @@ def test_empty_day_keeps_full_day_timeline_and_day_navigation():
     assert not app.exception
 
 
-def test_week_picker_updates_range_and_preserves_chosen_day():
+def test_day_picker_updates_week_range_and_preserves_chosen_day():
     app = calendar_app()
+    app.radio(key="calendar_view").set_value("Day").run()
     app.date_input[0].set_value(date(2026, 12, 31)).run()
+    app.radio(key="calendar_view").set_value("Week").run()
     assert not app.exception
     assert app.text_input[0].value == "December 28 \u2013 January 03, 2027"
     app.radio(key="calendar_view").set_value("Day").run()
