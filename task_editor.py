@@ -31,6 +31,10 @@ def has_draft_content(draft):
 
 
 def open_editor(pet_id, day=None, mode="Manual"):
+    previous_mode = st.session_state.get("draft_mode")
+    if previous_mode in DRAFT_SLOTS and has_draft_content(
+            st.session_state.get(DRAFT_SLOTS[previous_mode])):
+        mode = previous_mode
     st.session_state.editor_open = True
     st.session_state.entry_mode = mode
     st.session_state.editor_day = day

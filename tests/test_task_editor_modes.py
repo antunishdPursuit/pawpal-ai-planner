@@ -51,15 +51,39 @@ def test_generated_preview_and_manual_draft_remain_independent(monkeypatch):
     assert state.task_draft==manual and state.conversation_draft==ai
 
 
-def test_reopening_defaults_to_conversation_without_exposing_closed_manual_draft(monkeypatch):
+def test_reopening_retained_manual_draft_restores_mode_and_latest_edits(monkeypatch):
     state=setup(monkeypatch)
     switch(state,'Manual')
-    state.task_draft=TaskDraft(1,'Retained manual task',state.editor_day)
+    draft=TaskDraft(1,'Old title',state.editor_day)
+    state.task_draft=draft
+    state[draft.request_id+'_title']='Retained manual task'
     editor.close_editor()
     editor.open_editor(1,state.editor_day,'Conversation')
-    assert 'task_draft' not in state and state.manual_draft.title=='Retained manual task'
-    switch(state,'Manual')
+    assert state.entry_mode==state.draft_mode=='Manual'
+    assert state.task_draft.request_id==draft.request_id
     assert state.task_draft.title=='Retained manual task'
+    switch(state,'Conversation')
+    assert 'task_draft' not in state
+
+
+def test_fresh_editor_uses_requested_mode_after_discarding_manual_draft(monkeypatch):
+    state=setup(monkeypatch)
+    switch(state,'Manual')
+    state.task_draft=TaskDraft(1,'Discarded task',state.editor_day)
+    editor.cancel_editor()
+    editor.open_editor(1,date(2026,11,3),'Conversation')
+    assert state.entry_mode==state.draft_mode=='Conversation'
+    assert 'task_draft' not in state
+
+
+def test_reopening_conversation_does_not_switch_to_another_retained_manual_draft(monkeypatch):
+    state=setup(monkeypatch)
+    state.task_draft=TaskDraft(1,'AI preview',state.editor_day)
+    state.manual_draft=TaskDraft(1,'Manual task',state.editor_day)
+    editor.close_editor()
+    editor.open_editor(1,state.editor_day,'Conversation')
+    assert state.entry_mode==state.draft_mode=='Conversation'
+    assert state.task_draft.title=='AI preview'
 
 
 def test_reset_stays_in_current_mode_and_owner_cleanup_clears_all_drafts(monkeypatch):
