@@ -2,22 +2,23 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
-const source=fs.readFileSync('assets/assistant_audio.js','utf8').replace('export function createLive','function createLive')+';globalThis.make=createLive;';
+const source=fs.readFileSync('assets/assistant_audio.js','utf8').replaceAll('export function','function')+';globalThis.make=createLive;';
 function fixture(denied=false){
- const events=[],sockets=[],tracks=[{id:'track-one',stop(){this.stopped=true;}}];
+ const worklets=[],events=[],sockets=[],tracks=[{id:'track-one',stop(){this.stopped=true;}}];
  class Audio {constructor(){this.sampleRate=16000;this.currentTime=0;this.audioWorklet={addModule:async()=>{}};}async resume(){}async close(){this.closed=true;}createGain(){return {gain:{},connect(){},disconnect(){}};}createMediaStreamSource(){return {connect(){},disconnect(){}};}}
- class Worklet {constructor(){this.port={};}connect(){}disconnect(){}}
+ class Worklet {constructor(){this.port={};worklets.push(this);}connect(){}disconnect(){}}
  class Socket {constructor(){this.readyState=1;this.sent=[];sockets.push(this);}send(value){this.sent.push(JSON.parse(value));}close(){this.closed=true;}}
  const env={AudioContext:Audio,AudioWorkletNode:Worklet,WebSocket:Socket,navigator:{mediaDevices:{getUserMedia:async()=>{if(denied)throw Object.assign(new Error(),{name:'NotAllowedError'});return {getTracks:()=>tracks};}}}};
  const sandbox={window:env,Blob,URL,Map,Set,Uint8Array,DataView,Float32Array,setTimeout,clearTimeout,atob,btoa};vm.createContext(sandbox);vm.runInContext(source,sandbox);
- const live=sandbox.make({phase:v=>events.push(['phase',v]),end:(h,r)=>events.push(['end',r]),transcript:(r,t)=>events.push(['text',t]),tool:v=>events.push(['tool',v]),resources:v=>events.push(['resources',v])},env);
- return {live,events,sockets,tracks,env};
+ const live=sandbox.make({phase:v=>events.push(['phase',v]),end:(h,r)=>events.push(['end',r]),transcript:(r,t)=>events.push(['text',t]),tool:v=>events.push(['tool',v]),turn:v=>events.push(['turn',v]),commit:v=>events.push(['commit',v]),cancel:v=>events.push(['cancel',v]),resources:v=>events.push(['resources',v])},env);
+ return {live,events,sockets,tracks,env,worklets};
 }
+function speak(f){f.worklets.at(-1).port.onmessage({data:new Float32Array(8000).fill(.1)});f.worklets.at(-1).port.onmessage({data:new Float32Array(16000)});}
 const credential={token:'test-only',model:'test-model',session_id:'test-session'};
 test('save receipt returns to same socket without stopping voice, and next action works',async()=>{
  const f=fixture();await f.live.start(credential);const socket=f.sockets[0];socket.onopen();
  await socket.onmessage({data:JSON.stringify({setupComplete:{}})});
- await socket.onmessage({data:JSON.stringify({toolCall:{functionCalls:[{id:'save-one',name:'save_task',args:{proposal_id:'proposal'}}]}})});
+ speak(f);await socket.onmessage({data:JSON.stringify({toolCall:{functionCalls:[{id:'save-one',name:'save_task',args:{proposal_id:'proposal'}}]}})});
  f.live.receipt({session_id:'wrong-session',call:{id:'save-one'},result:{ok:true}});
  assert.equal(socket.sent.filter(s=>s.toolResponse).length,0);
  f.live.receipt({session_id:'test-session',call:{id:'save-one'},result:{ok:true,saved:true}});
@@ -29,7 +30,7 @@ test('save receipt returns to same socket without stopping voice, and next actio
 });
 test('parallel calls each receive a correlated result, duplicate receipt ignored',async()=>{
  const f=fixture();await f.live.start(credential);const s=f.sockets[0];s.onopen();
- await s.onmessage({data:JSON.stringify({toolCall:{functionCalls:[{id:'a',name:'find_pets',args:{}},{id:'b',name:'show_pets',args:{}}]}})});
+ speak(f);await s.onmessage({data:JSON.stringify({toolCall:{functionCalls:[{id:'a',name:'find_pets',args:{}},{id:'b',name:'show_pets',args:{}}]}})});
  for(const id of ['b','a','a'])f.live.receipt({session_id:'test-session',call:{id},result:{ok:true}});
  assert.equal(s.sent.filter(v=>v.toolResponse).length,2);f.live.stop();
 });
@@ -64,4 +65,61 @@ test('late permission from stopped attempt cannot attach to a newer voice sessio
  assert.equal(f.sockets.length,1);assert.equal(f.tracks[0].stopped,true);
  assert.equal(trackB.stopped,undefined);assert.equal(f.live.isActive(),true);
  f.live.stop();assert.equal(trackB.stopped,true);
+});
+
+test('delayed and interleaved transcripts never change audio turn or save audio',async()=>{
+ const f=fixture();await f.live.start(credential);const s=f.sockets[0];s.onopen();
+ await s.onmessage({data:JSON.stringify({setupComplete:{}})});
+ speak(f);
+ await s.onmessage({data:JSON.stringify({serverContent:{inputTranscription:{text:'Create a walk.'}}})});
+ await s.onmessage({data:JSON.stringify({toolCall:{functionCalls:[{id:'preview',name:'preview_task',args:{}}]}})});
+ f.live.receipt({session_id:'test-session',call:{id:'preview'},result:{ok:true}});
+ await s.onmessage({data:JSON.stringify({serverContent:{outputTranscription:{text:'Shall I save it?'},turnComplete:true}})});
+ speak(f);
+ await s.onmessage({data:JSON.stringify({toolCall:{functionCalls:[{id:'save',name:'save_task',args:{proposal_id:'p'}}]}})});
+ const save=f.events.filter(e=>e[0]==='tool').at(-1)[1];
+ assert.equal(save.turn,2);assert.equal(save.audio_turn,2);assert.ok(save.audio.startsWith('UklGR'));
+ await s.onmessage({data:JSON.stringify({serverContent:{inputTranscription:{text:'Yes, '}}})});
+ await s.onmessage({data:JSON.stringify({serverContent:{outputTranscription:{text:'Checking.'}}})});
+ await s.onmessage({data:JSON.stringify({serverContent:{inputTranscription:{text:'save it.'}}})});
+ assert.equal(f.events.filter(e=>e[0]==='turn'&&e[1].closed).length,2);
+ assert.equal(f.events.filter(e=>e[0]==='tool'&&e[1].call.name==='save_task').length,1);
+ f.live.receipt({session_id:'test-session',call:{id:'save',name:'save_task'},verification_id:'verified'});
+ assert.equal(f.events.filter(e=>e[0]==='commit').length,1);
+ assert.equal(f.events.find(e=>e[0]==='commit')[1].audio_turn,2);f.live.stop();
+});
+test('tool request waits for utterance closure, including a negative suffix after a short pause',async()=>{
+ const f=fixture();await f.live.start(credential);const s=f.sockets[0];s.onopen();await s.onmessage({data:JSON.stringify({setupComplete:{}})});
+ const push=data=>f.worklets.at(-1).port.onmessage({data});
+ push(new Float32Array(3200).fill(.1));push(new Float32Array(8000));
+ await s.onmessage({data:JSON.stringify({toolCall:{functionCalls:[{id:'save',name:'save_task',args:{}}]}})});
+ assert.equal(f.events.filter(e=>e[0]==='tool').length,0);
+ push(new Float32Array(3200).fill(.1));push(new Float32Array(16000));
+ const tool=f.events.find(e=>e[0]==='tool')[1];const raw=Buffer.from(tool.audio,'base64');
+ assert.equal(raw.readUInt32LE(40),(3200+8000+3200+16000)*2);
+ assert.equal(f.events.filter(e=>e[0]==='turn'&&e[1].closed).length,1);f.live.stop();
+});
+test('Stop or a newer utterance prevents committing a delayed verified confirmation',async()=>{
+ for(const stop of [false,true]){
+  const f=fixture();await f.live.start(credential);const s=f.sockets[0];s.onopen();await s.onmessage({data:JSON.stringify({setupComplete:{}})});speak(f);
+  await s.onmessage({data:JSON.stringify({toolCall:{functionCalls:[{id:'save',name:'save_task',args:{}}]}})});
+  if(stop)f.live.stop();else speak(f);
+  f.live.receipt({session_id:'test-session',call:{id:'save',name:'save_task'},verification_id:'verified'});
+  assert.equal(f.events.filter(e=>e[0]==='commit').length,0);f.live.stop();
+ }
+});
+test('overlong utterances stop instead of authorizing a truncated recording',async()=>{
+ const f=fixture();await f.live.start(credential);const s=f.sockets[0];s.onopen();await s.onmessage({data:JSON.stringify({setupComplete:{}})});
+ const push=data=>f.worklets.at(-1).port.onmessage({data});push(new Float32Array(16000).fill(.1));push(new Float32Array(30*16000).fill(.1));
+ assert.equal(f.live.isActive(),false);assert.equal(f.events.filter(e=>e[0]==='tool').length,0);
+ assert.match(f.events.find(e=>e[0]==='end')[1],/under 30 seconds/);
+});
+
+test('speech stays bound to the preview visible at its first voiced samples',async()=>{
+ const f=fixture();await f.live.start(credential);const s=f.sockets[0];s.onopen();await s.onmessage({data:JSON.stringify({setupComplete:{}})});
+ const push=data=>f.worklets.at(-1).port.onmessage({data});
+ push(new Float32Array(256).fill(.1));f.live.setPreview('late-preview');
+ push(new Float32Array(8000).fill(.1));push(new Float32Array(16000));
+ await s.onmessage({data:JSON.stringify({toolCall:{functionCalls:[{id:'save',name:'save_task',args:{proposal_id:'late-preview'}}]}})});
+ assert.equal(f.events.find(e=>e[0]==='tool')[1].preview_id,null);f.live.stop();
 });

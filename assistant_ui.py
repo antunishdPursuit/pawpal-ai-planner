@@ -8,6 +8,7 @@ from planner_storage import PlannerStore
 from assistant_actions import AssistantActions
 from assistant_model import respond
 from assistant_live import prepare_live
+from live_confirmation import stage_save, commit_save
 
 
 @st.cache_resource
@@ -40,13 +41,19 @@ def render_assistant():
         "configured": is_configured(), "receipts": receipts,
         "page": st.session_state.get("page", "Home"),
         "credential": st.session_state.get("assistant_credential"),
-        "proposal": ({"summary": pending["summary"], "conflicts": pending["conflicts"]} if pending else None),
+        "proposal": ({"id": pending["id"], "summary": pending["summary"], "conflicts": pending["conflicts"]} if pending else None),
     }, default={"outbox": []}, on_outbox_change=lambda: None, height=0)
     handled = {r["id"] for r in receipts}
     events = (result.outbox or [])[:32]
     cancelled = state.setdefault("cancelled_calls", set())
     terminated = state.setdefault("terminated_sessions", set())
     for item in events:
+        session = state.get("live_session", {})
+        if (isinstance(item, dict) and item.get("kind") == "voice_turn"
+                and item.get("session_id") == session.get("id") and type(item.get("turn")) is int
+                and item["turn"] >= session.get("audio_turn", 0)):
+            session.update(audio_turn=item["turn"], audio_closed=item.get("closed") is True)
+            state["turn"] = max(state["turn"], session.get("base_turn", 0) + item["turn"])
         if isinstance(item, dict) and item.get("kind") == "voice_end" and item.get("session_id"):
             terminated.add(item["session_id"])
         if isinstance(item, dict) and item.get("kind") == "cancel_tools":
@@ -84,19 +91,23 @@ def render_assistant():
                 state["live_session"] = {"id": credential["session_id"], "base_turn": state["turn"]}
                 state["live_calls"] = {}
                 state["cancelled_calls"] = set()
+                state["live_verifications"] = {}
+                state["confirmation_transcripts"] = {}
                 receipt["prepared"] = True
             except PlannerError as error:
                 receipt.update(message=str(error), failed=True)
         elif kind == "voice_start":
             session = state.get("live_session", {})
             if event.get("session_id") == session.get("id"):
-                session.update(active=True, base_turn=state["turn"])
+                session.update(active=True)
+        elif kind == "voice_turn":
+            pass  # The latest audio boundary is applied before any queued action.
         elif kind == "cancel_tools":
             calls = state.get("live_calls", {})
             completed = [calls[i] for i in event.get("call_ids", []) if i in calls and calls[i].get("saved")]
             if completed:
                 receipt["message"] = "The confirmed task was saved before cancellation reached the app. Check its calendar."
-        elif kind == "live_tool":
+        elif kind in ("live_tool", "live_commit"):
             session = state.get("live_session", {})
             credential = st.session_state.get("assistant_credential", {})
             call = event.get("call", {})
@@ -115,8 +126,22 @@ def render_assistant():
                 raw_turn = event.get("turn", 0)
                 turn = session["base_turn"] + (max(0, raw_turn) if type(raw_turn) is int else 0)
                 state["turn"] = max(state["turn"], turn)
-                response = actions.execute(call.get("name"), call.get("args", {}),
-                                           str(event.get("utterance", ""))[:2000], turn)
+                if call.get("name") == "save_task" and kind == "live_tool":
+                    staged = stage_save(event, actions, session)
+                    if staged.get("verification_id"):
+                        receipt.update(call={"id":call["id"], "name":call["name"]},
+                                       verification_id=staged["verification_id"], session_id=event.get("session_id"))
+                        receipts.append(receipt)
+                        del receipts[:-100]
+                        st.rerun()
+                    response = staged["result"]
+                elif kind == "live_commit" and call.get("name") == "save_task":
+                    response = commit_save(event, actions, session)
+                elif kind == "live_commit":
+                    response = {"ok": False, "error": "Unsupported confirmation action."}
+                else:
+                    response = actions.execute(call.get("name"), call.get("args", {}),
+                                               str(event.get("utterance", ""))[:2000], turn)
                 calls[call["id"]] = response
             receipt.update(call={"id":call.get("id"), "name":call.get("name")},
                            result=response, session_id=event.get("session_id"))

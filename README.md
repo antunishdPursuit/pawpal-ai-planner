@@ -34,7 +34,7 @@ For optional fictional presentation data, run `python seed_demo.py`. It adds thr
 
 ## How it works
 
-Gemini turns a request into a structured proposal. Local code validates the fields and registered pet, then presents an editable preview. A person confirms through the task dialog or the site-wide assistant; the storage layer validates again, saves once, and reads the task back. Manual entry uses the same validation and confirmation flow.
+Gemini turns a request into a structured proposal. Local code validates the fields and registered pet, then presents an editable preview. A person confirms through the task dialog or the site-wide assistant; the storage layer validates again, saves once, and reads the task back. Manual entry uses the same validation and confirmation flow. Live saves verify the complete spoken confirmation with a separate short transcription request. Delayed Live transcripts cannot authorize a save; Stop, a newer request, or a changed preview during verification prevents committing it. Each spoken request is limited to 30 seconds.
 
 [Architecture diagram](diagrams/architecture.mmd) · [Data model (ERD)](diagrams/erd.mmd) · [Responsible-AI model card](model_card.md)
 

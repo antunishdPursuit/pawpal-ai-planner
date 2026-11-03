@@ -1,7 +1,40 @@
+/** Delimit input audio independently of asynchronous transcript messages. */
+export function createSpeechTurns(callbacks) {
+ let current=null,last=null,turn=0,pre=[],preFrames=0,loudFrames=0,candidatePreview=null;
+ function wav(record){
+  const bytes=new Uint8Array(44+record.frames*2),view=new DataView(bytes.buffer);
+  const label=(at,value)=>{for(let i=0;i<value.length;i++)bytes[at+i]=value.charCodeAt(i);};
+  label(0,'RIFF');view.setUint32(4,36+record.frames*2,true);label(8,'WAVE');label(12,'fmt ');
+  view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,1,true);view.setUint32(24,record.rate,true);
+  view.setUint32(28,record.rate*2,true);view.setUint16(32,2,true);view.setUint16(34,16,true);label(36,'data');view.setUint32(40,record.frames*2,true);
+  let offset=44;for(const chunk of record.chunks)for(const value of chunk){view.setInt16(offset,Math.round(Math.max(-1,Math.min(1,value))*32767),true);offset+=2;}
+  let binary='';for(let i=0;i<bytes.length;i+=16384)binary+=String.fromCharCode(...bytes.subarray(i,i+16384));return btoa(binary);
+ }
+ function push(chunk,rate){
+  let energy=0;for(const value of chunk)energy+=value*value;
+  const voiced=Math.sqrt(energy/chunk.length)>=0.012;
+  if(!current){
+   pre.push(chunk.slice());preFrames+=chunk.length;
+   while(preFrames>rate*.24&&pre.length>1)preFrames-=pre.shift().length;
+   if(voiced&&loudFrames===0)candidatePreview=callbacks.preview?.()||null;
+   loudFrames=voiced?loudFrames+chunk.length:0;
+   if(loudFrames<rate*.032)return;
+   current={turn:++turn,rate,chunks:pre,frames:preFrames,quiet:0,closed:false,preview_id:candidatePreview};last=current;
+   pre=[];preFrames=0;loudFrames=0;callbacks.start(current);
+   for(const part of current.chunks)callbacks.audio(part,rate);return;
+  }
+  current.chunks.push(chunk.slice());current.frames+=chunk.length;
+  if(current.frames>rate*30){current.invalid=true;callbacks.error('Keep spoken requests under 30 seconds. Nothing was confirmed.');return;}
+  callbacks.audio(chunk,rate);current.quiet=voiced?0:current.quiet+chunk.length;
+  if(current.quiet>=rate*.9){const closed=current;current=null;closed.closed=true;callbacks.end(closed);}
+ }
+ return {push,latest:()=>current||last,turn:()=>turn,encode:record=>wav(record)};
+}
+
 /** Audio transport owns one socket; app actions run through the server bridge. */
 export function createLive(callbacks, env=window) {
  let socket,stream,input,output,source,processor,silent,ready=false,credential;
- let timer,connectTimer,nextTime=0,history=[],turn=0,ended=true,generation=0;
+ let timer,connectTimer,nextTime=0,history=[],turn=0,ended=true,generation=0,speech,visiblePreview=null;
  const playing=new Set(),pending=new Map();
  const phase=value=>callbacks.phase(value);
  function send(value){if(socket?.readyState===1)socket.send(JSON.stringify(value));}
@@ -18,7 +51,6 @@ export function createLive(callbacks, env=window) {
  }
  function append(role,text){
   if(!text)return;
-  if(role==='user'&&history.at(-1)?.role!=='user')turn++;
   if(history.at(-1)?.role===role)history.at(-1).text=(history.at(-1).text+text).slice(-2000);
   else history.push({role,text:text.slice(-2000)});
   history=history.slice(-12);callbacks.transcript(role,text);
@@ -43,17 +75,32 @@ export function createLive(callbacks, env=window) {
   try{await capture.audioWorklet.addModule(url);}finally{URL.revokeObjectURL(url);}
   if(ended||attempt!==generation){acquired.getTracks().forEach(t=>t.stop());capture.close().catch(()=>{});return;}
   source=capture.createMediaStreamSource(stream);processor=new env.AudioWorkletNode(input,'pawpal-assistant-capture');silent=input.createGain();silent.gain.value=0;
-  processor.port.onmessage=({data:chunk})=>{
-   if(!ready||ended)return;const bytes=new Uint8Array(chunk.length*2),view=new DataView(bytes.buffer);
-   for(let i=0;i<chunk.length;i++)view.setInt16(i*2,Math.round(Math.max(-1,Math.min(1,chunk[i]))*32767),true);
-   let binary='';for(let i=0;i<bytes.length;i+=16384)binary+=String.fromCharCode(...bytes.subarray(i,i+16384));
-   send({realtimeInput:{audio:{data:btoa(binary),mimeType:`audio/pcm;rate=${input.sampleRate}`}}});
-  };
+  processor.port.onmessage=({data:chunk})=>{if(ready&&!ended)speech.push(chunk,input.sampleRate);};
   source.connect(processor);processor.connect(silent);silent.connect(input.destination);
   callbacks.resources({connection:credential.session_id,track:stream.getTracks()[0]?.id||'active'});
  }
+ function sendAudio(chunk,rate){
+  const bytes=new Uint8Array(chunk.length*2),view=new DataView(bytes.buffer);
+  for(let i=0;i<chunk.length;i++)view.setInt16(i*2,Math.round(Math.max(-1,Math.min(1,chunk[i]))*32767),true);
+  let binary='';for(let i=0;i<bytes.length;i+=16384)binary+=String.fromCharCode(...bytes.subarray(i,i+16384));
+  send({realtimeInput:{audio:{data:btoa(binary),mimeType:`audio/pcm;rate=${rate}`}}});
+ }
+ function dispatch(item){
+  if(ended||item.sent||!item.utterance?.closed||item.utterance.invalid)return;
+  item.sent=true;
+  callbacks.tool({session_id:credential.session_id,call:item.call,turn:item.utterance.turn,
+   audio_turn:item.utterance.turn,preview_id:item.utterance.preview_id,audio:item.call.name==='save_task'?speech.encode(item.utterance):undefined,
+   utterance:[...history].reverse().find(i=>i.role==='user')?.text||'',history});
+ }
  async function start(value){
-  if(!ended)return;const attempt=++generation;ended=false;credential=value;history=[];turn=0;phase('connecting');
+  if(!ended)return;const attempt=++generation;ended=false;credential=value;history=[];turn=0;
+  speech=createSpeechTurns({
+   preview:()=>visiblePreview,
+   start(record){turn=record.turn;callbacks.turn?.({session_id:credential.session_id,turn,closed:false});stopPlayback();send({realtimeInput:{activityStart:{}}});},
+   audio:sendAudio,
+   end(record){send({realtimeInput:{activityEnd:{}}});callbacks.turn?.({session_id:credential.session_id,turn:record.turn,closed:true});for(const item of pending.values())dispatch(item);},
+   error:stop
+  });phase('connecting');
   try{
    connectTimer=setTimeout(()=>{if(attempt===generation)stop('Microphone permission was not received. Allow access and try again, or keep typing.');},25000);
    const speaker=new env.AudioContext({sampleRate:24000});output=speaker;await speaker.resume();
@@ -78,10 +125,10 @@ export function createLive(callbacks, env=window) {
      }
      for(const call of result.toolCall?.functionCalls||[]){
       if(pending.has(call.id))continue;
-      const wait=setTimeout(()=>{pending.delete(call.id);send({toolResponse:{functionResponses:[{id:call.id,name:call.name,response:{ok:false,error:'The app did not return an action result. Check the calendar before retrying a save.'}}]}});phase('listening');},35000);
-      pending.set(call.id,{name:call.name,timer:wait});phase('working');
-      callbacks.tool({session_id:credential.session_id,call,turn,
-       utterance:[...history].reverse().find(i=>i.role==='user')?.text||'',history});
+      const utterance=speech.latest();
+      if(!utterance){send({toolResponse:{functionResponses:[{id:call.id,name:call.name,response:{ok:false,error:'A spoken request is required before an app action.'}}]}});continue;}
+      const wait=setTimeout(()=>{pending.delete(call.id);callbacks.cancel?.({session_id:credential.session_id,call_ids:[call.id]});send({toolResponse:{functionResponses:[{id:call.id,name:call.name,response:{ok:false,error:'The app did not return an action result. Check the calendar before retrying a save.'}}]}});phase('listening');},65000);
+      const item={name:call.name,call,timer:wait,utterance,sent:false};pending.set(call.id,item);phase('working');dispatch(item);
      }
      if(result.toolCallCancellation?.ids?.length)callbacks.cancel?.({session_id:credential.session_id,call_ids:result.toolCallCancellation.ids});
      for(const id of result.toolCallCancellation?.ids||[]){const item=pending.get(id);if(item)clearTimeout(item.timer);pending.delete(id);}
@@ -94,8 +141,18 @@ export function createLive(callbacks, env=window) {
  }
  function receipt(value){
   if(ended||value.session_id!==credential?.session_id)return;
-  const item=pending.get(value.call?.id);if(!item)return;clearTimeout(item.timer);pending.delete(value.call.id);
+  const item=pending.get(value.call?.id);if(!item)return;
+  if(value.verification_id){
+   const latest=speech.latest();
+   if(latest===item.utterance&&latest.closed&&!latest.invalid&&!item.commitSent){
+    item.commitSent=true;callbacks.commit?.({session_id:credential.session_id,call:value.call,verification_id:value.verification_id,audio_turn:latest.turn});
+   }else if(!item.commitSent){
+    clearTimeout(item.timer);pending.delete(value.call.id);callbacks.cancel?.({session_id:credential.session_id,call_ids:[value.call.id]});
+    send({toolResponse:{functionResponses:[{id:value.call.id,name:item.name,response:{ok:false,cancelled:true,error:'The spoken request changed before confirmation completed. Prepare a new preview.'}}]}});
+   }return;
+  }
+  clearTimeout(item.timer);pending.delete(value.call.id);
   send({toolResponse:{functionResponses:[{id:value.call.id,name:item.name,response:value.result}]}});phase('listening');
  }
- return {start,stop,receipt,isActive:()=>!ended};
+ return {start,stop,receipt,setPreview:id=>{visiblePreview=id||null;},isActive:()=>!ended};
 }

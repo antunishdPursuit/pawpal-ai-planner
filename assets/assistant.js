@@ -19,6 +19,8 @@ export default function(args) {
   phase(value){voicePhase=value;voiceStatus={idle:'Voice stopped. You can keep chatting.',connecting:'Connecting microphone...',listening:'Live is on. Listening...',speaking:'PawPal is speaking...',working:'Working in PawPal...'}[value];controls();},
   transcript(role,value){if(lastRole===role&&log.lastElementChild){log.lastElementChild.append(document.createTextNode(value));log.scrollTop=log.scrollHeight;}else message(role,value);lastRole=role;},
   tool(value){emit({kind:'live_tool',...value});},
+  turn(value){emit({kind:'voice_turn',...value});},
+  commit(value){emit({kind:'live_commit',...value});},
   cancel(value){emit({kind:'cancel_tools',...value});},
   resources(value){root.dataset.connection=value.connection;root.dataset.track=value.track;},
   end(history,reason,turn){voiceStatus=reason;emit({kind:'voice_end',history,turn,session_id:current.data.credential?.session_id});controls();}
@@ -37,7 +39,7 @@ export default function(args) {
  function message(role,value){lastRole=null;const item=document.createElement('div');item.className='paw-message';item.dataset.role=role;const label=document.createElement('strong');label.textContent=role==='user'?'You':'PawPal';item.append(label,document.createTextNode(value));log.append(item);while(log.children.length>80)log.firstChild.remove();log.scrollTop=log.scrollHeight;}
  function emit(payload){const event={id:crypto.randomUUID(),...payload};outbox.push(event);current.setStateValue('outbox',outbox.slice());return event.id;}
  function update(next){current=next;root.dataset.updates=String(Number(root.dataset.updates)+1);for(const receipt of next.data.receipts||[]){if(seen.has(receipt.id))continue;seen.add(receipt.id);outbox=outbox.filter(e=>e.id!==receipt.id);if(receipt.message){message('assistant',receipt.message);voiceStatus=receipt.failed?receipt.message:'Ask about owners, pets, or care plans.';}if(receipt.call)audio.receipt(receipt);if(receipt.prepared||receipt.failed)preparing=false;busy=false;}const preview=el('.paw-proposal');preview.hidden=!next.data.proposal;preview.replaceChildren();if(next.data.proposal){const s=next.data.proposal.summary;const item=document.createElement('p');item.textContent=`${s.owner}  |  ${s.pet}\n${s.title}\n${s.date}  |  ${s.time} (${s.timezone})\n${s.repeat}${s.repeat==='CUSTOM'?' every '+s.interval_days+' days':''}\n${s.location||'No location'}\n${s.description||''}`;preview.append(item);for(const conflict of next.data.proposal.conflicts||[]){const warning=document.createElement('p');warning.textContent=conflict;preview.append(warning);}}
- controls();}
+ audio.setPreview(next.data.proposal?.id);controls();}
  function minimize(){audio.stop();panel.hidden=true;orb.setAttribute('aria-expanded','false');orb.focus();}
  orb.onclick=()=>{if(!panel.hidden){minimize();return;}panel.hidden=false;orb.setAttribute('aria-expanded','true');text.focus();};el('.paw-minimize').onclick=minimize;
  form.onsubmit=e=>{e.preventDefault();const value=text.value.trim();if(!value||busy||audio.isActive()||preparing)return;busy=true;message('user',value);text.value='';emit({kind:'chat',text:value});status.textContent='Thinking...';form.querySelector('button').disabled=true;};
