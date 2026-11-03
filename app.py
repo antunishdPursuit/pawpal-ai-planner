@@ -15,6 +15,7 @@ from gemini_planner import is_configured, configuration
 from ui_components import task_summary, calendar_item, brand, planner_header, pet_identity, task_state
 from calendar_presentation import render_timeline
 from homepage import show_home
+from assistant_ui import render_assistant
 
 st.set_page_config(page_title="PawPal AI Planner", page_icon=favicon(), layout="wide", initial_sidebar_state="auto")
 apply_theme()
@@ -336,6 +337,7 @@ def calendar_workspace(store, owner, owners):
 
 
 def main():
+    render_assistant()
     try:
         root_store = PlannerStore()
         profiles = root_store.list_profiles()
