@@ -39,7 +39,7 @@ def test_empty_day_keeps_full_day_timeline_and_day_navigation():
     app = calendar_app()
     app.radio(key="calendar_view").set_value("Day").run()
     assert not app.exception
-    assert app.date_input(key="selected_day").label == "Selected day"
+    assert app.date_input[0].label == "Selected day"
     assert app.session_state.selected_day == date(2026, 11, 6)
     assert not app.subheader
     assert any("Friday, November 06" in item.value for item in app.markdown)
@@ -62,9 +62,18 @@ def test_empty_day_keeps_full_day_timeline_and_day_navigation():
 
 def test_week_picker_updates_range_and_preserves_chosen_day():
     app = calendar_app()
-    app.date_input(key="selected_day").set_value(date(2026, 12, 31)).run()
+    app.date_input[0].set_value(date(2026, 12, 31)).run()
     assert not app.exception
     assert app.text_input[0].value == "December 28 \u2013 January 03, 2027"
     app.radio(key="calendar_view").set_value("Day").run()
-    assert app.date_input(key="selected_day").value == date(2026, 12, 31)
+    assert app.date_input[0].value == date(2026, 12, 31)
+    assert not app.exception
+
+
+def test_week_navigation_then_day_view_keeps_the_new_date():
+    app = calendar_app()
+    button(app, "Next week").click().run()
+    app.radio(key="calendar_view").set_value("Day").run()
+    assert app.date_input[0].value == date(2026, 11, 13)
+    assert app.session_state.calendar_date == date(2026, 11, 13)
     assert not app.exception

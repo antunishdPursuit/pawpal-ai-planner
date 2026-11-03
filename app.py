@@ -33,10 +33,12 @@ def pet_calendar(pet_id):
 def select_date(day):
     st.session_state.calendar_date = day
     st.session_state.selected_day = day
+    st.session_state.calendar_week_picker = day
+    st.session_state.calendar_day_picker = day
 
 
-def remember_date():
-    st.session_state.calendar_date = st.session_state.selected_day
+def remember_date(widget_key):
+    select_date(st.session_state[widget_key])
 
 
 @st.dialog("Plan a care task", width="medium", dismissible=True, on_dismiss=close_editor)
@@ -274,11 +276,11 @@ def calendar_workspace(store, owner, owners):
         if view == "Week":
             date_col.text_input("Selected week", value=period_label, disabled=True)
             with date_col.popover("Choose week", use_container_width=True):
-                selected = st.date_input("Choose a day in the week", value=None if "selected_day" in st.session_state else selected,
-                                         key="selected_day", on_change=remember_date)
+                selected = st.date_input("Choose a day in the week", value=selected,
+                                         key="calendar_week_picker", on_change=remember_date, args=("calendar_week_picker",))
         else:
-            selected = date_col.date_input("Selected day", value=None if "selected_day" in st.session_state else selected,
-                                           key="selected_day", on_change=remember_date)
+            selected = date_col.date_input("Selected day", value=selected,
+                                           key="calendar_day_picker", on_change=remember_date, args=("calendar_day_picker",))
         pet_id = pet_col.selectbox("Pet", [None] + [p.pet_id for p in pets],
                                   format_func=lambda value: "All pets" if value is None else (
                                       view_owner.get_pet(value).name + " / " + next(p.name for p in owners if p.find_pet(value))),
