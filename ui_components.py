@@ -69,7 +69,8 @@ def pet_identity(pet):
     st.html(
         '<div class="paw-pet-identity"><img alt="" aria-hidden="true" src="data:image/svg+xml;base64,'
         + image + '"><div><h3>' + escape(pet.name) + '</h3><p>'
-        + escape(pet.species.capitalize()) + ' / Age ' + str(pet.age) + '</p></div></div>',
+        + escape(pet.species.capitalize()) + ' / ' + str(pet.age)
+        + (' year old' if pet.age == 1 else ' years old') + '</p></div></div>',
     )
 
 

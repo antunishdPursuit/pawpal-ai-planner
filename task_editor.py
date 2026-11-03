@@ -241,7 +241,7 @@ def show_editor(store, owner):
                 st.button("Review previous preview", on_click=restore_previous_preview)
             return
         if owner.find_pet(draft.pet_id) is None:
-            st.error("This draft belongs to another user. Start over.")
+            st.error("This draft belongs to another pet owner. Start over.")
             st.button("Start over", on_click=start_over)
             return
         review_heading = st.container(horizontal=True, vertical_alignment="center", key="review_heading")

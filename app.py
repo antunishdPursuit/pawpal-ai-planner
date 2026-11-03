@@ -79,12 +79,12 @@ def profile_form(store):
         name = st.text_input("Name", max_chars=80)
         zones = sorted(available_timezones())
         zone = st.selectbox("Timezone", zones, index=zones.index("America/New_York"))
-        submitted = st.form_submit_button("Create user", type="primary", use_container_width=True)
+        submitted = st.form_submit_button("Create pet owner", type="primary", use_container_width=True)
     if submitted:
         try:
             owner = store.create_profile(name, zone)
         except (ValueError, sqlite3.Error, OSError) as error:
-            st.error(str(error) if isinstance(error, ValueError) else "Could not create this user. Try again.")
+            st.error(str(error) if isinstance(error, ValueError) else "Could not create this pet owner. Try again.")
         else:
             activate_profile(owner.owner_id)
             st.rerun()
@@ -93,7 +93,7 @@ def profile_form(store):
 def user_page(store, owner, profiles):
     with st.container(key="profile_surface"):
         if owner:
-            st.caption("CURRENT USER")
+            st.caption("CURRENT PET OWNER")
             st.subheader(owner.name)
             with st.expander("Timezone: " + owner.timezone):
                 with st.form("timezone_form"):
@@ -110,22 +110,22 @@ def user_page(store, owner, profiles):
                         st.rerun()
         if (has_unsaved_draft()
                 or st.session_state.get("conversation") or st.session_state.get("pending_request")):
-            st.warning("Selecting or creating another user discards your unsaved draft and conversation.")
+            st.warning("Selecting or creating another pet owner discards your unsaved draft and conversation.")
         if profiles:
             others = [p for p in profiles if owner is None or p.owner_id != owner.owner_id]
             if others:
                 choice, use = st.columns([1.6, 1], vertical_alignment="bottom")
-                selected = choice.selectbox("Saved users", [p.owner_id for p in others],
+                selected = choice.selectbox("Saved pet owners", [p.owner_id for p in others],
                                        format_func=lambda value: next(p.name for p in others if p.owner_id == value),
                                        key="user_choice")
-                if use.button("Use this user", type="primary", use_container_width=True):
+                if use.button("Use this pet owner", type="primary", use_container_width=True):
                     activate_profile(selected)
                     st.rerun()
-        with st.expander("Add a new local user", expanded=not profiles):
+        with st.expander("Add a new local pet owner", expanded=not profiles):
             profile_form(store)
     with st.container(key="profile_details"):
         with st.expander("Local saving and Gemini"):
-            st.caption("Data is saved on this computer, without cloud sync. Local users are not password-protected.")
+            st.caption("Data is saved on this computer, without cloud sync. Local pet owners are not password-protected.")
             st.text(str(store.path))
             st.write("Gemini configured" if is_configured() else "Gemini not configured")
             st.text("Model: " + configuration()[1])
@@ -135,7 +135,7 @@ def pet_form(store):
     with st.form("pet_form", border=False):
         name = st.text_input("Pet name", max_chars=80, key="pet_name")
         species = st.selectbox("Species", ["dog", "cat", "other"], key="pet_species")
-        age = st.number_input("Age", min_value=0, max_value=30, value=2, step=1, key="pet_age")
+        age = st.number_input("Age (years)", min_value=0, max_value=30, value=2, step=1, key="pet_age")
         submit = st.form_submit_button("Add pet", type="primary", use_container_width=True)
     if submit:
         try:
@@ -158,18 +158,18 @@ def sidebar(owner, profiles):
         brand(lambda: navigate("Home"))
         with st.container(key="current_user"):
             if owner:
-                st.caption("CURRENT USER")
+                st.caption("CURRENT PET OWNER")
                 st.button(owner.name, icon=":material/account_circle:", on_click=navigate,
-                          args=("User",), use_container_width=True, help="Change user")
+                          args=("User",), use_container_width=True, help="Change pet owner")
             else:
-                st.button("Choose user" if profiles else "Add user", on_click=navigate,
+                st.button("Choose pet owner" if profiles else "Add pet owner", on_click=navigate,
                           args=("User",), use_container_width=True)
         with st.container(key="workspace_nav"):
             for page, icon in (("Pets", ":material/pets:"), ("Calendar", ":material/calendar_month:")):
                 enabled = page == "User" or (owner is not None and (page == "Pets" or any(p.pet_count for p in profiles)))
                 st.button(page, icon=icon, on_click=navigate, args=(page,), key=f"nav_{page}",
                           disabled=not enabled, use_container_width=True,
-                          help=("Choose a user first" if owner is None else "Add a pet first") if not enabled else None,
+                          help=("Choose a pet owner first" if owner is None else "Add a pet first") if not enabled else None,
                           type="primary" if st.session_state.page == page else "secondary")
     return st.session_state.page
 
@@ -265,13 +265,20 @@ def calendar_workspace(store, owner, owners):
                       help="Add a pet first" if not owner.pets else None)
         with st.container(key="calendar_filters"):
             date_col, owner_col, pet_col, status_col = st.columns([1.5, 1.1, 1.1, 1])
-        owner_id = owner_col.selectbox("Owner", [None] + [p.owner_id for p in owners],
-                                      format_func=lambda value: "All owners" if value is None else next(p.name for p in owners if p.owner_id == value),
+        owner_id = owner_col.selectbox("Pet owner", [None] + [p.owner_id for p in owners],
+                                      format_func=lambda value: "All pet owners" if value is None else next(p.name for p in owners if p.owner_id == value),
                                       key="calendar_owner")
         pets = [p for profile in owners if owner_id is None or profile.owner_id == owner_id for p in profile.pets]
         if st.session_state.get("calendar_pet") not in [None] + [p.pet_id for p in pets]:
             st.session_state.calendar_pet = None
-        selected = date_col.date_input("Selected week" if view == "Week" else "Selected day", value=None if "selected_day" in st.session_state else selected, key="selected_day", on_change=remember_date)
+        if view == "Week":
+            date_col.text_input("Selected week", value=period_label, disabled=True)
+            with date_col.popover("Choose week", use_container_width=True):
+                selected = st.date_input("Choose a day in the week", value=None if "selected_day" in st.session_state else selected,
+                                         key="selected_day", on_change=remember_date)
+        else:
+            selected = date_col.date_input("Selected day", value=None if "selected_day" in st.session_state else selected,
+                                           key="selected_day", on_change=remember_date)
         pet_id = pet_col.selectbox("Pet", [None] + [p.pet_id for p in pets],
                                   format_func=lambda value: "All pets" if value is None else (
                                       view_owner.get_pet(value).name + " / " + next(p.name for p in owners if p.find_pet(value))),
@@ -356,11 +363,10 @@ def main():
     if page == "Home":
         show_home(open_planner)
         return
-    title = ("Change user" if owner else "Choose user" if profiles else "Add user") if page == "User" else "Your pets" if page == "Pets" else "Community calendar"
+    title = ("Change pet owner" if owner else "Choose pet owner" if profiles else "Add pet owner") if page == "User" else "Your pets" if page == "Pets" else "Community calendar"
     subtitle = ""
     if page == "Calendar":
-        with using_timezone(owner.timezone):
-            subtitle = local_today().strftime("%A, %B %d") + " / " + owner.timezone
+        subtitle = owner.timezone
     planner_header(title, subtitle)
     if page == "User":
         user_page(root_store, owner, profiles)
