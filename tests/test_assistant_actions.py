@@ -121,7 +121,7 @@ def test_successful_save_receipt_survives_optional_context_failure(tmp_path,monk
 
 def test_new_task_lookup_exposes_actual_recurring_schedule(tmp_path):
     root,o1,o2,p1,p2,a=fixture(tmp_path)
-    args=dict(owner_id=o2.owner_id,pet_id=p2.pet_id,title="Recurring care",due_date="2026-12-02",time_of_day=None,repeat="WEEKLY")
+    args=dict(owner_id=o2.owner_id,pet_id=p2.pet_id,title="Recurring care",due_date="2026-12-02",time_of_day=None,anytime_confirmed=True,repeat="WEEKLY")
     result=a.execute("preview_task",args,turn=1)
     assert a.execute("save_task",{"proposal_id":result["proposal_id"]},"yes",turn=2)["saved"]
     matches=a.execute("find_tasks",{"query":"Recurring"})["matches"]

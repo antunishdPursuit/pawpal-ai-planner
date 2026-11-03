@@ -12,7 +12,7 @@ The planner combines persistent local storage, a personal calendar, and Gemini-a
 - Create tasks through the assistant after explicit confirmation, or use the text-only Conversation and Manual task dialog.
 - Continue chatting after saving. Stop or minimize the assistant to release the microphone.
 - Demo access covers all local profiles, including newly created records; profiles are not authenticated accounts.
-- Review and edit the pet, date, time, recurrence, and location before saving. Ambiguous requests prompt clarification; conflicting start times across future recurrences require confirmation.
+- Review and edit the pet, date, time, recurrence, and location before saving. AI requests without a time prompt a follow-up question; Anytime must be explicitly chosen. Ambiguous requests prompt clarification; conflicting start times across future recurrences require confirmation.
 - Keep profiles, pets, tasks, and completion history in local SQLite storage.
 
 ## Run locally

@@ -8,7 +8,7 @@ from planner_clock import local_today, using_timezone
 from planner_storage import PlannerStore
 from task_contract import TaskDraft
 from voice_completion import confirmed
-from gemini_planner import _ambiguous_time
+from gemini_planner import _ambiguous_time, MISSING_TIME_MESSAGE
 
 
 def field_schema(kind, description=""):
@@ -19,7 +19,8 @@ TASK_FIELDS = {
     "owner_id": field_schema("integer", "The target pet owner ID"),
     "pet_id": field_schema("integer", "The registered pet ID"),
     "title": field_schema("string"), "due_date": field_schema("string", "YYYY-MM-DD in owner's timezone"),
-    "time_of_day": {"type": ["string", "null"], "description": "HH:MM, 24 hour; null means Anytime"},
+    "time_of_day": {"type": ["string", "null"], "description": "HH:MM, 24 hour. Ask if missing; null only for an explicit Anytime choice."},
+    "anytime_confirmed": {"type": "boolean", "description": "True only if the user explicitly chose Anytime/no specific time. Missing time is not consent."},
     "repeat": {"type": "string", "enum": ["NONE", "DAILY", "WEEKLY", "CUSTOM"]},
     "interval_days": field_schema("integer"), "description": field_schema("string"), "location": field_schema("string"),
 }
@@ -98,7 +99,7 @@ class AssistantActions:
                 schema = spec["parameters_json_schema"]["properties"][key]
                 kinds = schema["type"] if isinstance(schema["type"], list) else [schema["type"]]
                 valid = (("null" in kinds and value is None) or ("integer" in kinds and type(value) is int)
-                         or ("string" in kinds and isinstance(value, str)))
+                         or ("string" in kinds and isinstance(value, str)) or ("boolean" in kinds and type(value) is bool))
                 if not valid or ("enum" in schema and value not in schema["enum"]):
                     raise ValueError("Invalid action details. Please clarify your request.")
             result = self._execute(name, args, utterance, turn)
@@ -206,6 +207,8 @@ class AssistantActions:
                 raise ValueError("Do you mean AM or PM? Please clarify before creating the preview.")
             # A change request invalidates any earlier confirmation, including invalid replacements.
             self.state.pop("proposal", None)
+            if args["time_of_day"] is None and not args.get("anytime_confirmed", False):
+                return {"ok": False, "needs_time": True, "error": MISSING_TIME_MESSAGE}
             draft = TaskDraft(pet_id, args["title"], date.fromisoformat(args["due_date"]),
                               time_of_day=time.fromisoformat(args["time_of_day"]) if args["time_of_day"] else None,
                               repeat=args.get("repeat", "NONE"), interval_days=args.get("interval_days", 1),

@@ -19,7 +19,10 @@ Navigate to the relevant screen when answering; find_pets opens a unique match,
 show_pets opens Pets, show_calendar opens the requested daily calendar.
 Preserve referents across turns. For multiple matches ask which owner/pet.
 Call get_context before resolving relative dates, and use the target owner's fresh timezone/today. Ask AM/PM
-for ambiguous times. Missing time may be Anytime; missing date needs clarification.
+for ambiguous times. If time is missing, explicitly ask what time to schedule
+before calling preview_task. Never invent a time or silently choose Anytime.
+Only use null time with anytime_confirmed=true when the user explicitly says
+Anytime/no specific time. A missing date also needs clarification.
 Only preview complete tasks. Repeat options NONE, DAILY, WEEKLY, CUSTOM; ask before
 converting unsupported patterns. Always display a fresh preview for changed details.
 Never request saving in the same user turn as preview. Only save the latest
@@ -55,8 +58,17 @@ def respond(request, actions, history, turn):
                     return str(choice["message"])[:3000]
                 result = actions.execute(choice["action"], json.loads(choice["arguments_json"]), request, turn)
                 events.append({"action": choice["action"], "result": result})
+                if result.get("needs_time"):
+                    return result["error"]
                 if result.get("confirmation_required"):
-                    return "Review the task details below. Shall I save it?" if not result["conflicts"] else "Review the details and time conflict below. Say save anyway to accept, or ask for a change."
+                    summary = result["summary"]
+                    if summary["time"] == "Anytime":
+                        at = "Anytime, as requested"
+                    else:
+                        from datetime import time
+                        at = time.fromisoformat(summary["time"]).strftime("%I:%M %p").lstrip("0") + " (" + summary["timezone"] + ")"
+                    details = f"{summary['title']} for {summary['pet']} ({summary['owner']}) on {summary['date']} at {at}."
+                    return details + (" Shall I save it?" if not result["conflicts"] else " There is a time conflict. Say save anyway to accept, or ask for a change.")
                 if result.get("saved"):
                     s = result["summary"]
                     return f"Saved {s['title']} for {s['pet']} ({s['owner']}). The calendar shows the task. What would you like next?"

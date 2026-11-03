@@ -60,7 +60,7 @@ def test_cancel_and_stop_reject_queued_save_before_dispatch(tmp_path,monkeypatch
         root,o,p,state,events,drain=harness(tmp_path/end_kind,monkeypatch)
         events.append({"id":"prepare","kind":"prepare_voice"});drain()
         a=AssistantActions(root.path,state["assistant_state"])
-        proposal=a.execute("preview_task",dict(owner_id=o.owner_id,pet_id=p.pet_id,title="Walk",due_date="2026-12-03",time_of_day=None),turn=1)
+        proposal=a.execute("preview_task",dict(owner_id=o.owner_id,pet_id=p.pet_id,title="Walk",due_date="2026-12-03",time_of_day=None,anytime_confirmed=True),turn=1)
         events.extend([{"id":"save","kind":"live_tool","session_id":"session","turn":2,"utterance":"yes",
                         "call":{"id":"save-call","name":"save_task","args":{"proposal_id":proposal["proposal_id"]}}},
                        {"id":"cancel","kind":end_kind,"session_id":"session","call_ids":["save-call"],"history":[]}])
@@ -74,7 +74,7 @@ def test_late_cancel_reports_committed_save_instead_of_cancellation(tmp_path,mon
     root,o,p,state,events,drain=harness(tmp_path,monkeypatch)
     events.append({"id":"prepare","kind":"prepare_voice"});drain()
     a=AssistantActions(root.path,state["assistant_state"])
-    proposal=a.execute("preview_task",dict(owner_id=o.owner_id,pet_id=p.pet_id,title="Walk",due_date="2026-12-03",time_of_day=None),turn=1)
+    proposal=a.execute("preview_task",dict(owner_id=o.owner_id,pet_id=p.pet_id,title="Walk",due_date="2026-12-03",time_of_day=None,anytime_confirmed=True),turn=1)
     events.extend([{"id":"turn","kind":"voice_turn","session_id":"session","turn":2,"closed":True},
                    {"id":"save","kind":"live_tool","session_id":"session","turn":2,"audio_turn":2,"preview_id":proposal["proposal_id"],"audio":audio(),
                     "utterance":"stale transcript", "call":{"id":"save-call","name":"save_task","args":{"proposal_id":proposal["proposal_id"]}}}])
@@ -102,7 +102,7 @@ def test_stop_during_confirmation_asr_prevents_late_commit(tmp_path,monkeypatch)
     root,o,p,state,events,drain=harness(tmp_path,monkeypatch)
     events.append({"id":"prepare","kind":"prepare_voice"});drain()
     a=AssistantActions(root.path,state["assistant_state"])
-    proposal=a.execute("preview_task",dict(owner_id=o.owner_id,pet_id=p.pet_id,title="Walk",due_date="2026-12-03",time_of_day=None),turn=1)
+    proposal=a.execute("preview_task",dict(owner_id=o.owner_id,pet_id=p.pet_id,title="Walk",due_date="2026-12-03",time_of_day=None,anytime_confirmed=True),turn=1)
     def stop_while_verifying(*args):
         events.append({"id":"stop","kind":"voice_end","session_id":"session","turn":2,"history":[]})
         return "Yes, save it."
@@ -123,7 +123,7 @@ def test_latest_audio_boundary_wins_over_earlier_queued_commit(tmp_path,monkeypa
     root,o,p,state,events,drain=harness(tmp_path,monkeypatch)
     events.append({"id":"prepare","kind":"prepare_voice"});drain()
     a=AssistantActions(root.path,state["assistant_state"])
-    proposal=a.execute("preview_task",dict(owner_id=o.owner_id,pet_id=p.pet_id,title="Walk",due_date="2026-12-03",time_of_day=None),turn=1)
+    proposal=a.execute("preview_task",dict(owner_id=o.owner_id,pet_id=p.pet_id,title="Walk",due_date="2026-12-03",time_of_day=None,anytime_confirmed=True),turn=1)
     events.extend([{"id":"turn","kind":"voice_turn","session_id":"session","turn":2,"closed":True},
                    {"id":"save","kind":"live_tool","session_id":"session","turn":2,"audio_turn":2,"preview_id":proposal["proposal_id"],"audio":audio(),
                     "call":{"id":"save-call","name":"save_task","args":{"proposal_id":proposal["proposal_id"]}}}])
