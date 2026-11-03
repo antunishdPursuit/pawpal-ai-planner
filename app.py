@@ -6,7 +6,7 @@ from zoneinfo import available_timezones
 
 import streamlit as st
 from app_theme import apply_theme, favicon
-from calendar_view import CalendarEntry, entries_for_day, filter_entries, day_conflicts, community_entries, community_overdue
+from calendar_view import CalendarEntry, entries_for_day, filter_entries, community_entries, community_overdue
 from pawpal_system import Scheduler
 from planner_clock import local_today, using_timezone
 from planner_storage import PlannerStore
@@ -167,7 +167,7 @@ def sidebar(owner, profiles):
                           args=("User",), use_container_width=True)
         with st.container(key="workspace_nav"):
             for page, icon in (("Pets", ":material/pets:"), ("Calendar", ":material/calendar_month:")):
-                enabled = page == "User" or (owner is not None and (page == "Pets" or any(p.pet_count for p in profiles)))
+                enabled = page == "User" or (owner is not None and (page == "Pets" or bool(owner.pets)))
                 st.button(page, icon=icon, on_click=navigate, args=(page,), key=f"nav_{page}",
                           disabled=not enabled, use_container_width=True,
                           help=("Choose a pet owner first" if owner is None else "Add a pet first") if not enabled else None,
@@ -237,6 +237,7 @@ def calendar_page(store, owner, owners):
 
 
 def calendar_workspace(store, owner, owners):
+    owners = [owner]
     view_owner = copy(owner)
     view_owner.pets = [pet for profile in owners for pet in profile.pets]
     selected = st.session_state.get("calendar_date") or local_today()
@@ -265,16 +266,15 @@ def calendar_workspace(store, owner, owners):
                       args=(chosen_pet, selected, "Conversation"), disabled=not owner.pets,
                       help="Add a pet first" if not owner.pets else None)
         with st.container(key="calendar_filters"):
-            date_col, owner_col, pet_col, status_col = st.columns([1.5, 1.1, 1.1, 1])
-        owner_id = owner_col.selectbox("Pet owner", [None] + [p.owner_id for p in owners],
-                                      format_func=lambda value: "All pet owners" if value is None else next(p.name for p in owners if p.owner_id == value),
-                                      key="calendar_owner")
+            if view == "Day":
+                date_col, pet_col, status_col = st.columns([1.5, 1.1, 1])
+            else:
+                pet_col, status_col = st.columns(2)
+        owner_id = owner.owner_id
         pets = [p for profile in owners if owner_id is None or profile.owner_id == owner_id for p in profile.pets]
         if st.session_state.get("calendar_pet") not in [None] + [p.pet_id for p in pets]:
             st.session_state.calendar_pet = None
-        if view == "Week":
-            date_col.text_input("Selected week", value=period_label, disabled=True)
-        else:
+        if view == "Day":
             selected = date_col.date_input("Selected day", value=selected,
                                            key="calendar_day_picker", on_change=remember_date, args=("calendar_day_picker",))
         pet_id = pet_col.selectbox("Pet", [None] + [p.pet_id for p in pets],
@@ -306,14 +306,15 @@ def calendar_workspace(store, owner, owners):
             return
         if selected == local_today():
             due = filter_entries(community_entries(owners, selected, owner.timezone, owner_id)
-                                 + community_overdue(owners, owner.timezone, owner_id), pet_id)
+                                 + community_overdue(owners, owner.timezone, owner_id), pet_id, status)
             due = list({(e.task.task_id, e.status): e for e in due}.values())
             if due:
                 with st.expander("Today's care summary"):
                     counts = [f"{sum(e.status == state for e in due)} {state}" for state in ("pending", "overdue", "done")
                               if any(e.status == state for e in due)]
                     st.write(" / ".join(counts))
-        for warning in day_conflicts(owner, selected):
+        visible_entries = filter_entries(community_entries(owners, selected, owner.timezone, owner_id), pet_id, status)
+        for warning in Scheduler.detect_conflicts([entry.task for entry in visible_entries if entry.status != "done"], owner.pets):
             st.warning(warning)
         if selected == local_today():
             overdue_entries = filter_entries(community_overdue(owners, owner.timezone, owner_id), pet_id, status)
@@ -325,7 +326,7 @@ def calendar_workspace(store, owner, owners):
         if selected == local_today():
             entries = [e for e in entries if e.status != "overdue"]
         if not entries:
-            st.caption("No tasks match this day and these filters.")
+            st.caption("No tasks scheduled for this day with these filters.")
         with st.container(key="day_grid"):
             items = [calendar_item(entry, view_owner.get_pet(entry.task.assigned_pet_id)) for entry in entries]
             st.markdown(render_timeline([selected.strftime("%A, %B %d")], [items],
@@ -350,7 +351,7 @@ def main():
                 st.session_state.page = "User"
         elif st.session_state.get("page") not in ("Home", "User", "Pets", "Calendar"):
             st.session_state.page = "Pets"
-        elif st.session_state.page == "Calendar" and not any(p.pet_count for p in profiles):
+        elif st.session_state.page == "Calendar" and not bool(owner.pets):
             st.session_state.page = "Pets"
     except (sqlite3.Error, OSError):
         st.error("Local storage is unavailable. Check folder permissions or PAWPAL_DB_PATH, then reload.")
@@ -361,7 +362,7 @@ def main():
     if page == "Home":
         show_home(open_planner)
         return
-    title = ("Change pet owner" if owner else "Choose pet owner" if profiles else "Add pet owner") if page == "User" else "Your pets" if page == "Pets" else "Community calendar"
+    title = ("Change pet owner" if owner else "Choose pet owner" if profiles else "Add pet owner") if page == "User" else "Your pets" if page == "Pets" else "Your calendar"
     subtitle = ""
     if page == "Calendar":
         subtitle = owner.timezone
@@ -381,7 +382,7 @@ def main():
         if page == "Pets":
             pets_page(store, owner)
         else:
-            calendar_page(store, owner, root_store.load_community())
+            calendar_page(store, owner, [owner])
         if st.session_state.get("pet_dialog_open") and page == "Pets":
             pet_dialog(store)
         elif st.session_state.get("editor_open") and owner.pets and page == "Calendar":

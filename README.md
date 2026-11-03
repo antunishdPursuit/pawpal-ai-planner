@@ -1,12 +1,12 @@
 # PawPal AI Planner
 
-PawPal AI Planner is a local pet-care calendar that turns a typed or spoken request into a task you can review and save. Create a profile and pets, plan care on a shared calendar, and confirm the details before the app writes anything.
+PawPal AI Planner is a local pet-care calendar that turns a typed or spoken request into a task you can review and save. Create a profile and pets, plan care on a personal calendar, and confirm the details before the app writes anything.
 
-The planner combines persistent local storage, a shared calendar, and Gemini-assisted task planning with validation and human confirmation.
+The planner combines persistent local storage, a personal calendar, and Gemini-assisted task planning with validation and human confirmation.
 
 ## What it does
 
-- Organize pets and care tasks across local profiles in a shared calendar.
+- Organize pets and care tasks in a personal calendar for the active pet owner.
 - Create tasks manually, by typing a request, or through dictation and live conversation.
 - Review and edit the pet, date, time, recurrence, and location before saving. Ambiguous requests prompt clarification; conflicting start times across future recurrences require confirmation.
 - Keep profiles, pets, tasks, and completion history in local SQLite storage.
