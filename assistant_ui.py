@@ -5,6 +5,7 @@ import json
 from time import time
 import sqlite3
 import base64
+from uuid import uuid4
 import streamlit as st
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 from gemini_planner import is_configured, PlannerError
@@ -35,6 +36,8 @@ def assistant_component():
 def suspend_assistant():
     """Invalidate voice work when leaving the planner; keep conversation history."""
     state = st.session_state.get("assistant_state", {})
+    state.pop("navigation", None)
+    state.pop("arrived_route", None)
     session = state.pop("live_session", {})
     if session.get("id"):
         state.setdefault("terminated_sessions", set()).add(session["id"])
@@ -50,7 +53,15 @@ def rerun_assistant():
 
 def render_assistant():
     state = st.session_state.setdefault("assistant_state", {"history": [], "turn": 0})
-    if not state.get("route"):
+    page = st.session_state.get("page", "Home")
+    navigation = state.get("navigation")
+    if navigation and navigation["from_page"] != page:
+        state.pop("navigation", None)
+        state.pop("arrived_route", None)
+    route = state.get("route")
+    if route and route["page"] != page:
+        state["navigation"] = {"id": str(uuid4()), "route": dict(state.pop("route")), "from_page": page}
+    if not state.get("route") and not state.get("navigation") and not state.get("arrived_route"):
         owner_id = st.session_state.get("active_owner_id")
         page = st.session_state.get("page", "Home")
         focus = state.setdefault("context", {})
@@ -67,6 +78,8 @@ def render_assistant():
         "configured": is_configured(), "receipts": receipts,
         "page": st.session_state.get("page", "Home"),
         "history": state["history"],
+        "navigation": ({"id": state["navigation"]["id"], "page": state["navigation"]["route"]["page"], "arrived": state["navigation"].get("arrived", False)}
+                       if state.get("navigation") else None),
         "credential": st.session_state.get("assistant_credential"),
         "proposal": ({"id": pending["id"], "summary": pending["summary"], "conflicts": pending["conflicts"]} if pending else None),
     }, default={"outbox": []}, on_outbox_change=lambda: None, height=0)
@@ -78,6 +91,9 @@ def render_assistant():
     terminated = state.setdefault("terminated_sessions", set())
     processed = False
     for item in queued:
+        if item.get("kind") == "chat" or (item.get("kind") == "voice_turn" and not item.get("closed")):
+            state.pop("navigation", None)
+            state.pop("arrived_route", None)
         session = state.get("live_session", {})
         if (isinstance(item, dict) and item.get("kind") == "voice_turn"
                 and item.get("session_id") == session.get("id") and type(item.get("turn")) is int
@@ -106,7 +122,13 @@ def render_assistant():
                                    result={"ok": False, "error": message})
                 receipts.append(receipt)
                 rerun_assistant()
-        if kind == "chat":
+        if kind == "navigation_done":
+            navigation = state.get("navigation")
+            if (navigation and not navigation.get("arrived") and event.get("navigation_id") == navigation["id"]
+                    and navigation["from_page"] == st.session_state.get("page", "Home")):
+                state["arrived_route"] = navigation["route"]
+                navigation["arrived"] = True
+        elif kind == "chat":
             if state.get("live_session", {}).get("active"):
                 receipt["message"] = "Stop voice before sending a typed message."
             else:
@@ -210,4 +232,4 @@ def render_assistant():
         del handled_order[:-1024]
     if processed:
         rerun_assistant()
-    return state.pop("route", None)
+    return state.get("arrived_route") or state.get("route")

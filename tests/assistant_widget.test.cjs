@@ -69,3 +69,12 @@ test('voice preparation uses local elapsed time rather than a skewed server cloc
  const f=fixture();f.host.pawpalAssistant.update({...f.args,data:{configured:true,receipts:[],credential:{session_id:'clock-test',issued_at:-1000000}}});
  assert.equal(f.nodes['.paw-live'].textContent,'Start voice');f.nodes['.paw-live'].onclick();assert.equal(f.events.at(-1).kind,'voice_start');f.cleanup();
 });
+
+test('real renderer emits arrival only after running, and the page update restores position',async()=>{
+ const f=fixture(true);await f.pet.ready;f.nodes['.paw-orb'].onclick();
+ const update=data=>f.host.pawpalAssistant.update({...f.args,data:{configured:true,receipts:[],...data}});
+ update({navigation:{id:'trip',page:'Pets'}});assert.equal(f.events.filter(e=>e.kind==='navigation_done').length,0);
+ f.advance(4000);assert.equal(f.events.filter(e=>e.kind==='navigation_done').length,1);assert.ok(Number(f.nodes.canvas.dataset.x)<0);
+ update({navigation:{id:'trip',page:'Pets'}});assert.equal(f.events.filter(e=>e.kind==='navigation_done').length,1);
+ update({page:'Pets',navigation:null});assert.equal(f.nodes.canvas.dataset.x,'0');f.cleanup();
+});

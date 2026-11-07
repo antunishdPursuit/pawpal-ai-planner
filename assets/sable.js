@@ -6,6 +6,7 @@ export function createSable(canvas, button, assets, env=window) {
  let images={},name='sleep',desired='sleep',frames,durations,elapsed=0,last=null,frameRequest,cueDwell=0,exitingCue=false;
  let facing='left',x=0,roaming=false,destination=0,hovered=false,focused=false,paused=false,disposed=false,loaded=false,loops=0;
  const document=env.document;
+ let navigation=null;
  function play(next,cell=null) {
   name=next;const clip=assets.clips[name];frames=clip.frames.slice();durations=clip.durations.slice();elapsed=0;
   exitingCue=false;cueDwell=cues.has(name)&&name!=='awake'?200:0;
@@ -54,6 +55,7 @@ export function createSable(canvas, button, assets, env=window) {
  }
  function setIntent(next) {
   if(!assets.clips[next]||!['sleep','awake','listen','think','friendly','walk','run'].includes(next))throw new Error('Unknown companion intent');
+  if(navigation){navigation.restore=next;return;}
   if(next==='sleep'&&Math.abs(x)>.01){roaming=true;destination=0;desired='run';}
   else {desired=next;roaming=false;}
   reconcile();draw();
@@ -75,6 +77,10 @@ export function createSable(canvas, button, assets, env=window) {
   Object.assign(canvas.dataset,{state:name,intent:desired,frame:String(index()),pose:clip.atlas==='posture'?String(col):'',facing,x:String(Math.round(x)),loops:String(loops),paused:String(paused||media.matches)});
  }
  function travel(dt) {
+  if(navigation){
+   if(name==='run'&&!navigation.arrived){navigation.elapsed+=dt;x=navigation.origin-navigation.distance*Math.min(1,navigation.elapsed/560);if(navigation.elapsed>=560){navigation.arrived=true;navigation.done();}}
+   return;
+  }
   if(!roaming||!movement(name)||desired!==name)return;
   const step=(name==='run'?160:70)*dt/1000;
   x+=Math.sign(destination-x)*Math.min(Math.abs(destination-x),step);
@@ -84,8 +90,9 @@ export function createSable(canvas, button, assets, env=window) {
  }
  function tick(now) {
   if(disposed)return;
+  if(navigation&&!navigation.arrived&&(paused||media.matches||document.hidden)){navigation.arrived=true;navigation.done();}
   const stopped=paused||media.matches||document.hidden||((hovered||focused)&&roaming);
-  if(loaded&&!stopped){
+  if(loaded&&!stopped&&!navigation?.arrived){
    const dt=last===null?0:Math.min(100,now-last);elapsed+=dt;cueDwell=Math.max(0,cueDwell-dt);travel(dt);
    let guard=0;while(elapsed>=duration()&&guard++<20){const extra=elapsed-duration();finish();elapsed+=extra;}
    reconcile();draw();
@@ -98,6 +105,7 @@ export function createSable(canvas, button, assets, env=window) {
   last=stopped?null:now;frameRequest=env.requestAnimationFrame(tick);
  }
  function wander() {
+  if(navigation)return;
   if(disposed||paused||media.matches||document.hidden||hovered||focused)return;
   const limit=Math.max(0,Math.min(220,env.innerWidth-188));if(limit<48)return;
   roaming=true;destination=-limit;desired='walk';reconcile();
@@ -113,7 +121,14 @@ export function createSable(canvas, button, assets, env=window) {
  const ready=Promise.all(Object.entries(assets.images).map(([key,url])=>new Promise((resolve,reject)=>{const image=new env.Image();image.onload=()=>{images[key]=image;resolve();};image.onerror=()=>reject(new Error('Companion image unavailable'));image.src=url;}))).then(()=>{
   if(disposed)return;loaded=true;button.dataset.art='ready';draw();frameRequest=env.requestAnimationFrame(tick);
  }).catch(()=>{if(!disposed){button.dataset.art='unavailable';canvas.hidden=true;}});
- return {ready,setIntent,wander,setPaused(value){paused=Boolean(value);last=null;draw();},isPaused:()=>paused,
+ function navigate(done){
+  const trip={done,elapsed:0,arrived:false,restore:desired,origin:x,distance:Math.min(88,Math.max(0,Math.min(220,env.innerWidth-188)+x))};navigation=trip;roaming=false;destination=-220;desired='run';
+  const cancel=()=>{if(navigation===trip){navigation=null;x=0;desired=trip.restore;reconcile();draw();}};
+  if(paused||media.matches||document.hidden||!loaded){trip.arrived=true;done();}
+  else {facing='left';reconcile();draw();}
+  return cancel;
+ }
+ return {ready,setIntent,wander,navigate,setPaused(value){paused=Boolean(value);last=null;draw();},isPaused:()=>paused,
   cleanup(){disposed=true;env.cancelAnimationFrame(frameRequest);button.removeEventListener('pointerenter',enter);button.removeEventListener('pointerleave',leave);button.removeEventListener('focus',focus);button.removeEventListener('blur',blur);document.removeEventListener('visibilitychange',visibility);env.removeEventListener('resize',resize);}
  };
 }

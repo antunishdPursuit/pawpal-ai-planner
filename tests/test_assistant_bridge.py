@@ -214,3 +214,48 @@ def test_large_acknowledged_backlog_does_not_replay_when_receipts_are_trimmed(tm
     assert len(state["assistant_state"]["handled_events"])==151
     drain()
     assert len(state["assistant_state"]["handled_events"])==151
+
+
+def test_cross_page_route_waits_for_matching_arrival_and_same_page_does_not(tmp_path,monkeypatch):
+    root,o,p,state,events,drain=harness(tmp_path,monkeypatch)
+    state['page']='User';drain()
+    state['assistant_state']['route']={'page':'Pets','owner_id':o.owner_id}
+    assert drain() is None
+    nav=state['assistant_state']['navigation']
+    events.append({'id':'wrong','kind':'navigation_done','navigation_id':'wrong'})
+    assert drain() is None
+    events.append({'id':'arrive','kind':'navigation_done','navigation_id':nav['id']})
+    assert drain()=={'page':'Pets','owner_id':o.owner_id}
+    assert state['assistant_state'].pop('arrived_route')=={'page':'Pets','owner_id':o.owner_id}
+    state['assistant_state']['route']={'page':'User'}
+    assert drain()=={'page':'User'}
+
+
+def test_new_request_cancels_pending_navigation(tmp_path,monkeypatch):
+    root,o,p,state,events,drain=harness(tmp_path,monkeypatch)
+    state['page']='User';drain();state['assistant_state']['route']={'page':'Pets'};drain()
+    nav=state['assistant_state']['navigation']
+    events.extend([{'id':'arrive','kind':'navigation_done','navigation_id':nav['id']},{'id':'new','kind':'chat','text':'Stay here'}])
+    assert drain() is None
+    assert 'navigation' not in state['assistant_state']
+
+
+def test_real_action_route_survives_context_alias_during_travel(tmp_path,monkeypatch):
+    root,o,p,state,events,drain=harness(tmp_path,monkeypatch)
+    state['page']='User';drain();actions=AssistantActions(root.path,state['assistant_state'])
+    actions.execute('show_pets',{'owner_id':o.owner_id})
+    assert state['assistant_state']['context'] is state['assistant_state']['route']
+    assert drain() is None
+    nav=state['assistant_state']['navigation']
+    assert nav['route']['page']=='Pets' and nav['route']['owner_id']==o.owner_id
+    drain()
+    events.append({'id':'arrive','kind':'navigation_done','navigation_id':nav['id']})
+    route=drain();assert route['page']=='Pets' and route['owner_id']==o.owner_id
+
+
+def test_manual_page_change_discards_pending_arrival(tmp_path,monkeypatch):
+    root,o,p,state,events,drain=harness(tmp_path,monkeypatch)
+    state['page']='User';drain();state['assistant_state']['route']={'page':'Pets'};drain()
+    nav=state['assistant_state']['navigation'];state['assistant_state']['arrived_route']=nav['route']
+    state['page']='Calendar';assert drain() is None
+    assert 'navigation' not in state['assistant_state'] and 'arrived_route' not in state['assistant_state']

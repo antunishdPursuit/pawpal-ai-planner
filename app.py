@@ -378,8 +378,14 @@ def assistant_navigate(route):
 @st.fragment
 def planner_assistant():
     route = render_assistant()
+    if not route and st.session_state.get("assistant_state", {}).get("navigation"):
+        return
     refresh = st.session_state.pop("assistant_refresh", False)
     changed = assistant_navigate(route) if route else False
+    if route:
+        state = st.session_state.get("assistant_state", {})
+        state.pop("arrived_route", None)
+        state.pop("route", None)
     if changed or refresh:
         st.rerun()
 

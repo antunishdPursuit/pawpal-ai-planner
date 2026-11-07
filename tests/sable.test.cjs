@@ -71,3 +71,10 @@ test('reduced motion uses expressive stills with no roaming',async()=>{
  f.pet.wander();f.advance(3000);assert.equal(f.canvas.dataset.frame,frame);assert.equal(f.canvas.dataset.x,'0');
  f.pet.setIntent('friendly');f.advance(32);assert.equal(f.canvas.dataset.state,'friendly');assert.equal(f.canvas.dataset.frame,'3');f.pet.cleanup();
 });
+
+test('navigation runs before arrival and honors pause or reduced motion immediately',async()=>{
+ const f=await fixture();let arrived=0;const states=new Set();const cancel=f.pet.navigate(()=>arrived++);
+ for(let i=0;i<180;i++){f.advance(16);states.add(f.canvas.dataset.state);if(arrived)break;}
+ assert.ok(states.has('stand'));assert.ok(states.has('run'));assert.equal(arrived,1);assert.ok(Number(f.canvas.dataset.x)<0);assert.ok(Number(f.canvas.dataset.x)>=-88);f.advance(2000);assert.equal(arrived,1);cancel();assert.equal(f.canvas.dataset.x,'0');f.pet.cleanup();
+ const r=await fixture({reduced:true});let immediate=0;r.pet.navigate(()=>immediate++);assert.equal(immediate,1);r.pet.cleanup();
+});
