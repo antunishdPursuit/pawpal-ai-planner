@@ -45,12 +45,12 @@ export function createSpeechTurns(callbacks,detector) {
 /** Audio transport owns one socket; app actions run through the server bridge. */
 export function createLive(callbacks, env=window) {
  let socket,stream,input,output,source,processor,silent,ready=false,credential;
- let timer,connectTimer,nextTime=0,history=[],turn=0,ended=true,generation=0,speech,visiblePreview=null,detector,muted=false,responseComplete=true;
+ let timer,connectTimer,nextTime=0,history=[],turn=0,ended=true,generation=0,speech,visiblePreview=null,detector,muted=false,responseComplete=true,greetingPending=true,outputStarted=false;
  const playing=new Set(),pending=new Map();
  const phase=value=>callbacks.phase(muted&&value==='listening'?'muted':value);
- function listening(){const current=speech?.latest();phase(current&&!current.closed&&!current.invalid?'hearing':playing.size?'speaking':pending.size||!responseComplete?'working':'listening');}
+ function listening(){if(responseComplete&&!playing.size){greetingPending=false;outputStarted=false;}const current=speech?.latest();phase(current&&!current.closed&&!current.invalid?'hearing':playing.size?'speaking':pending.size||!responseComplete?'working':'listening');}
  function send(value){if(socket?.readyState===1)socket.send(JSON.stringify(value));}
- function stopPlayback(){for(const p of playing){try{p.stop();}catch{}}playing.clear();nextTime=0;}
+ function stopPlayback(){for(const p of playing){try{p.stop();}catch{}}playing.clear();nextTime=0;outputStarted=false;}
  function stop(reason='Voice stopped. You can keep chatting.'){
   if(ended)return;ended=true;generation++;ready=false;clearTimeout(timer);clearTimeout(connectTimer);
   for(const item of pending.values())clearTimeout(item.timer);pending.clear();
@@ -69,7 +69,7 @@ export function createLive(callbacks, env=window) {
   history=history.slice(-12);callbacks.transcript(role,text);
  }
  function play(encoded){
-  if(!output||ended)return;
+  if(!output||ended)return;outputStarted=true;
   const raw=atob(encoded),view=new DataView(Uint8Array.from(raw,c=>c.charCodeAt(0)).buffer);
   const buffer=output.createBuffer(1,raw.length/2,24000),channel=buffer.getChannelData(0);
   for(let i=0;i<channel.length;i++)channel[i]=view.getInt16(i*2,true)/32768;
@@ -89,7 +89,7 @@ export function createLive(callbacks, env=window) {
   try{await capture.audioWorklet.addModule(url);}finally{URL.revokeObjectURL(url);}
   if(ended||attempt!==generation){acquired.getTracks().forEach(t=>t.stop());capture.close().catch(()=>{});return;}
   source=capture.createMediaStreamSource(stream);processor=new env.AudioWorkletNode(input,'pawpal-assistant-capture');silent=input.createGain();silent.gain.value=0;
-  processor.port.onmessage=({data:chunk})=>{if(ready&&!ended&&!muted){try{speech.push(chunk,input.sampleRate);}catch{stop('Speech detection unavailable. You can still type.');}}};
+  processor.port.onmessage=({data:chunk})=>{if(ready&&!ended&&!muted&&!greetingPending&&!outputStarted){try{speech.push(chunk,input.sampleRate);}catch{stop('Speech detection unavailable. You can still type.');}}};
   source.connect(processor);processor.connect(silent);silent.connect(input.destination);
   callbacks.resources({connection:credential.session_id,track:stream.getTracks()[0]?.id||'active'});
  }
@@ -107,7 +107,7 @@ export function createLive(callbacks, env=window) {
    utterance:[...history].reverse().find(i=>i.role==='user')?.text||'',history});
  }
  async function start(value){
-  if(!ended)return;const attempt=++generation;ended=false;credential=value;history=[];turn=0;speech=null;muted=false;responseComplete=true;
+  if(!ended)return;const attempt=++generation;ended=false;credential=value;history=[];turn=0;speech=null;muted=false;responseComplete=true;greetingPending=true;
   phase('connecting');
   try{
    const created=await callbacks.detector();
@@ -133,7 +133,7 @@ export function createLive(callbacks, env=window) {
     try{
      let raw=event.data;if(raw instanceof Blob)raw=await raw.text();if(ended||attempt!==generation)return;const result=JSON.parse(raw);
      if(result.error){stop('The speech service rejected this session. Prepare voice and try again.');return;}
-     if(result.setupComplete){clearTimeout(connectTimer);ready=true;phase('listening');timer=setTimeout(()=>stop('Voice session ended. Prepare voice to continue.'),8*60*1000);send({clientContent:{turns:[{role:'user',parts:[{text:'Greet briefly and ask how you can help with PawPal.'}]}],turnComplete:true}});}
+     if(result.setupComplete){clearTimeout(connectTimer);ready=true;responseComplete=false;phase('working');timer=setTimeout(()=>stop('Voice session ended. Prepare voice to continue.'),8*60*1000);send({clientContent:{turns:[{role:'user',parts:[{text:'Say in English: "Hello, I’m PawPal, your pet-care assistant. Sable is here to help too. How can I help you today?" Then wait for the user to respond.'}]}],turnComplete:true}});}
      const c=result.serverContent;
      if(c){
       if(c.interrupted){stopPlayback();responseComplete=true;listening();}

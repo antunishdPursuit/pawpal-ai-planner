@@ -17,7 +17,7 @@ function speak(f){f.worklets.at(-1).port.onmessage({data:new Float32Array(8000).
 const credential={token:'test-only',model:'test-model',session_id:'test-session'};
 
 test('spoken input shows listening then working as soon as the utterance closes',async()=>{
- const f=fixture();await f.live.start(credential);const s=f.sockets[0];s.onopen();await s.onmessage({data:JSON.stringify({setupComplete:{}})});
+ const f=fixture();await f.live.start(credential);const s=f.sockets[0];s.onopen();await s.onmessage({data:JSON.stringify({setupComplete:{}})});await s.onmessage({data:JSON.stringify({serverContent:{turnComplete:true}})});
  const push=data=>f.worklets.at(-1).port.onmessage({data});push(new Float32Array(3200).fill(.1));
  assert.equal(f.events.filter(e=>e[0]==='phase').at(-1)[1],'hearing');
  push(new Float32Array(16000));assert.equal(f.events.filter(e=>e[0]==='phase').at(-1)[1],'working');
@@ -27,7 +27,7 @@ test('spoken input shows listening then working as soon as the utterance closes'
 });
 test('save receipt returns to same socket without stopping voice, and next action works',async()=>{
  const f=fixture();await f.live.start(credential);const socket=f.sockets[0];socket.onopen();
- await socket.onmessage({data:JSON.stringify({setupComplete:{}})});
+ await socket.onmessage({data:JSON.stringify({setupComplete:{}})});await socket.onmessage({data:JSON.stringify({serverContent:{turnComplete:true}})});
  speak(f);await socket.onmessage({data:JSON.stringify({toolCall:{functionCalls:[{id:'save-one',name:'save_task',args:{proposal_id:'proposal'}}]}})});
  f.live.receipt({session_id:'wrong-session',call:{id:'save-one'},result:{ok:true}});
  assert.equal(socket.sent.filter(s=>s.toolResponse).length,0);
@@ -79,7 +79,7 @@ test('late permission from stopped attempt cannot attach to a newer voice sessio
 
 test('delayed and interleaved transcripts never change audio turn or save audio',async()=>{
  const f=fixture();await f.live.start(credential);const s=f.sockets[0];s.onopen();
- await s.onmessage({data:JSON.stringify({setupComplete:{}})});
+ await s.onmessage({data:JSON.stringify({setupComplete:{}})});await s.onmessage({data:JSON.stringify({serverContent:{turnComplete:true}})});
  speak(f);
  await s.onmessage({data:JSON.stringify({serverContent:{inputTranscription:{text:'Create a walk.'}}})});
  await s.onmessage({data:JSON.stringify({toolCall:{functionCalls:[{id:'preview',name:'preview_task',args:{}}]}})});
@@ -99,7 +99,7 @@ test('delayed and interleaved transcripts never change audio turn or save audio'
  assert.equal(f.events.find(e=>e[0]==='commit')[1].audio_turn,2);f.live.stop();
 });
 test('tool request waits for utterance closure, including a negative suffix after a short pause',async()=>{
- const f=fixture();await f.live.start(credential);const s=f.sockets[0];s.onopen();await s.onmessage({data:JSON.stringify({setupComplete:{}})});
+ const f=fixture();await f.live.start(credential);const s=f.sockets[0];s.onopen();await s.onmessage({data:JSON.stringify({setupComplete:{}})});await s.onmessage({data:JSON.stringify({serverContent:{turnComplete:true}})});
  const push=data=>f.worklets.at(-1).port.onmessage({data});
  push(new Float32Array(3200).fill(.1));push(new Float32Array(8000));
  await s.onmessage({data:JSON.stringify({toolCall:{functionCalls:[{id:'save',name:'save_task',args:{}}]}})});
@@ -111,7 +111,7 @@ test('tool request waits for utterance closure, including a negative suffix afte
 });
 test('Stop or a newer utterance prevents committing a delayed verified confirmation',async()=>{
  for(const stop of [false,true]){
-  const f=fixture();await f.live.start(credential);const s=f.sockets[0];s.onopen();await s.onmessage({data:JSON.stringify({setupComplete:{}})});speak(f);
+  const f=fixture();await f.live.start(credential);const s=f.sockets[0];s.onopen();await s.onmessage({data:JSON.stringify({setupComplete:{}})});await s.onmessage({data:JSON.stringify({serverContent:{turnComplete:true}})});speak(f);
   await s.onmessage({data:JSON.stringify({toolCall:{functionCalls:[{id:'save',name:'save_task',args:{}}]}})});
   if(stop)f.live.stop();else speak(f);
   f.live.receipt({session_id:'test-session',call:{id:'save',name:'save_task'},verification_id:'verified'});
@@ -119,14 +119,14 @@ test('Stop or a newer utterance prevents committing a delayed verified confirmat
  }
 });
 test('overlong utterances stop instead of authorizing a truncated recording',async()=>{
- const f=fixture();await f.live.start(credential);const s=f.sockets[0];s.onopen();await s.onmessage({data:JSON.stringify({setupComplete:{}})});
+ const f=fixture();await f.live.start(credential);const s=f.sockets[0];s.onopen();await s.onmessage({data:JSON.stringify({setupComplete:{}})});await s.onmessage({data:JSON.stringify({serverContent:{turnComplete:true}})});
  const push=data=>f.worklets.at(-1).port.onmessage({data});push(new Float32Array(16000).fill(.1));push(new Float32Array(30*16000).fill(.1));
  assert.equal(f.live.isActive(),false);assert.equal(f.events.filter(e=>e[0]==='tool').length,0);
  assert.match(f.events.find(e=>e[0]==='end')[1],/under 30 seconds/);
 });
 
 test('speech stays bound to the preview visible at its first voiced samples',async()=>{
- const f=fixture();await f.live.start(credential);const s=f.sockets[0];s.onopen();await s.onmessage({data:JSON.stringify({setupComplete:{}})});
+ const f=fixture();await f.live.start(credential);const s=f.sockets[0];s.onopen();await s.onmessage({data:JSON.stringify({setupComplete:{}})});await s.onmessage({data:JSON.stringify({serverContent:{turnComplete:true}})});
  const push=data=>f.worklets.at(-1).port.onmessage({data});
  push(new Float32Array(256).fill(.1));f.live.setPreview('late-preview');
  push(new Float32Array(8000).fill(.1));push(new Float32Array(16000));
@@ -135,7 +135,7 @@ test('speech stays bound to the preview visible at its first voiced samples',asy
 });
 
 test('mute invalidates an open confirmation, pairs activityEnd, blocks capture and resumes on the same socket',async()=>{
- const f=fixture();await f.live.start(credential);const s=f.sockets[0];s.onopen();await s.onmessage({data:JSON.stringify({setupComplete:{}})});
+ const f=fixture();await f.live.start(credential);const s=f.sockets[0];s.onopen();await s.onmessage({data:JSON.stringify({setupComplete:{}})});await s.onmessage({data:JSON.stringify({serverContent:{turnComplete:true}})});
  const push=data=>f.worklets.at(-1).port.onmessage({data});push(new Float32Array(3200).fill(.1));
  await s.onmessage({data:JSON.stringify({toolCall:{functionCalls:[{id:'save',name:'save_task',args:{}}]}})});
  f.live.setMuted(true);assert.equal(f.tracks[0].enabled,false);assert.equal(f.live.isActive(),true);
@@ -145,7 +145,7 @@ test('mute invalidates an open confirmation, pairs activityEnd, blocks capture a
  f.live.setMuted(false);assert.equal(f.tracks[0].enabled,true);speak(f);assert.equal(f.sockets.length,1);assert.equal(f.events.filter(x=>x[0]==='turn'&&x[1].closed).length,1);f.live.stop();
 });
 test('speaking continues until all scheduled audio ends, including a tool receipt',async()=>{
- const f=fixture();await f.live.start(credential);const s=f.sockets[0];s.onopen();await s.onmessage({data:JSON.stringify({setupComplete:{}})});speak(f);
+ const f=fixture();await f.live.start(credential);const s=f.sockets[0];s.onopen();await s.onmessage({data:JSON.stringify({setupComplete:{}})});await s.onmessage({data:JSON.stringify({serverContent:{turnComplete:true}})});speak(f);
  await s.onmessage({data:JSON.stringify({toolCall:{functionCalls:[{id:'owners',name:'list_owners',args:{}}]}})});
  await s.onmessage({data:JSON.stringify({serverContent:{modelTurn:{parts:[{inlineData:{data:Buffer.alloc(4800).toString('base64')}}]},turnComplete:true}})});
  f.live.receipt({session_id:'test-session',call:{id:'owners'},result:{ok:true}});assert.equal(f.events.filter(x=>x[0]==='phase').at(-1)[1],'speaking');
@@ -159,8 +159,16 @@ test('muting before permission arrives disables the eventual track',async()=>{
 });
 
 test('provider interruption does not replace an in-progress hearing cue',async()=>{
- const f=fixture();await f.live.start(credential);const s=f.sockets[0];s.onopen();await s.onmessage({data:JSON.stringify({setupComplete:{}})});
+ const f=fixture();await f.live.start(credential);const s=f.sockets[0];s.onopen();await s.onmessage({data:JSON.stringify({setupComplete:{}})});await s.onmessage({data:JSON.stringify({serverContent:{turnComplete:true}})});
  f.worklets.at(-1).port.onmessage({data:new Float32Array(3200).fill(.1)});
  await s.onmessage({data:JSON.stringify({serverContent:{interrupted:true}})});
  assert.equal(f.events.filter(x=>x[0]==='phase').at(-1)[1],'hearing');f.live.stop();
+});
+
+test('opening greeting blocks all capture until generated audio finishes playing',async()=>{
+ const f=fixture();await f.live.start(credential);const s=f.sockets[0];s.onopen();await s.onmessage({data:JSON.stringify({setupComplete:{}})});
+ speak(f);assert.equal(f.events.filter(x=>x[0]==='turn').length,0);
+ await s.onmessage({data:JSON.stringify({serverContent:{modelTurn:{parts:[{inlineData:{data:Buffer.alloc(4800).toString('base64')}}]},turnComplete:true}})});
+ speak(f);assert.equal(f.events.filter(x=>x[0]==='turn').length,0);
+ f.players[0].onended();speak(f);assert.equal(f.events.filter(x=>x[0]==='turn'&&x[1].closed).length,1);f.live.stop();
 });
