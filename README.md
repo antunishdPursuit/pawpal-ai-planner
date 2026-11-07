@@ -10,7 +10,7 @@ The planner combines persistent local storage, a personal calendar, and Gemini-a
 - In the planner (User, Pets and Calendar), hover over or focus Sable to wake her, and select her to open the assistant. She reacts while listening, processing a request, and replying. Animation can be paused independently of voice and respects reduced-motion preferences.
 - Find owners, pets, tasks and repeat schedules; open the relevant profile or calendar.
 - Create tasks through the assistant after explicit confirmation, or use the text-only Conversation and Manual task dialog.
-- Continue chatting after saving. Mute the microphone to pause input while staying connected; Stop or minimize releases it. Speech detection runs locally using the bundled WebRTC detector.
+- Continue chatting after saving. Mute the microphone to pause input while staying connected; Stop or minimize releases it. Speech detection runs locally using the bundled Silero V5 model.
 - Demo access covers all local profiles, including newly created records; profiles are not authenticated accounts.
 - Review and edit the pet, date, time, recurrence, and location before saving. AI requests without a time prompt a follow-up question; Anytime must be explicitly chosen. Ambiguous requests prompt clarification; conflicting start times across future recurrences require confirmation.
 - Keep profiles, pets, tasks, and completion history in local SQLite storage.
