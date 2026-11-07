@@ -9,10 +9,10 @@ const binary=fs.readFileSync('assets/vendor/silero/silero_vad_v5.onnx').toString
 const wasm=fs.readFileSync('assets/vendor/onnxruntime/ort-wasm-simd.wasm').toString('base64');
 async function fixture(){
  const context=vm.createContext({WebAssembly,Uint8Array,Int16Array,Float32Array,DataView,Math,Number,Error,BigInt64Array,ort,atob,btoa});vm.runInContext(code,context);
- const detector=await context.detector(binary,wasm),events=[],probabilities=[];
- const turns=context.turns({preview:()=>null,start:r=>events.push(['start',r.turn]),end:r=>events.push(['end',r.turn]),audio(){},error:e=>{throw Error(e);}},detector);
+ const detector=await context.detector(binary,wasm),events=[],probabilities=[],sent=[];
+ const turns=context.turns({preview:()=>null,start:r=>events.push(['start',r.turn]),end:r=>events.push(['end',r.turn]),audio:part=>sent.push(part.slice()),error:e=>{throw Error(e);}},detector);
  const gate=context.createSpeechGate(detector,(chunk,probability)=>{probabilities.push(probability);turns.pushClassified(chunk,16000,probability>=.65);},error=>{throw error;});
- return {detector,turns,events,gate,probabilities,async push(chunk,rate=16000){for(let i=0;i<chunk.length;i+=128){gate.push(chunk.slice(i,i+128),rate);await gate.drain();}}};
+ return {detector,turns,events,gate,probabilities,sent,async push(chunk,rate=16000){for(let i=0;i<chunk.length;i+=128){gate.push(chunk.slice(i,i+128),rate);await gate.drain();}}};
 }
 function recordedSpeech(){const raw=fs.readFileSync('tests/fixtures/webrtc/test-audio.raw');return Float32Array.from({length:Math.floor(raw.length/2)*2},(_,i)=>raw.readInt16LE(Math.floor(i/2)*2)/32768);}
 test('real WASM detector rejects digital silence, quiet noise, louder stationary noise and a 50ms tone',async()=>{
@@ -87,4 +87,25 @@ test('detector startup warms the model and releases a failed session before capt
  let released=false,frames=0;
  const runtime={env:{wasm:{}},Tensor:class{},InferenceSession:{async create(){return {async run(){frames++;throw Error('warm-up failed');},async release(){released=true;}};}}};
  await assert.rejects(context.createVoiceDetector('','',runtime),/warm-up failed/);assert.equal(frames,1);assert.equal(released,true);
+});
+
+
+test('guarded noise in pre-roll cannot make real neural keyboard classification open a turn',async()=>{
+ const f=await fixture();f.turns.seed([new Float32Array(3200).fill(.03)],16000,null);let seed=8;
+ for(let n=0;n<300;n++){
+  const frame=Float32Array.from({length:160},(_,i)=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return .2*(2*seed/4294967296-1)*Math.exp(-((n*160+i)%1120)/70);});
+  await f.push(frame);
+ }
+ assert.deepEqual(f.events,[]);await f.detector.destroy();
+});
+
+
+test('real Silero speech confirmation preserves a seeded first-phoneme prefix',async()=>{
+ const f=await fixture(),wav=fs.readFileSync('tests/fixtures/voice/speech-yes.wav');
+ const start=wav.indexOf(Buffer.from('data'))+8,length=wav.readUInt32LE(start-4);
+ const samples=Float32Array.from({length:length/2},(_,i)=>wav.readInt16LE(start+i*2)/32768);
+ const onset=samples.findIndex(v=>Math.abs(v)>.004),speech=samples.slice(onset),prefix=speech.slice(0,1600);
+ f.turns.seed([prefix],16000,null);assert.equal(f.events.length,0);assert.equal(f.sent.length,0);
+ await f.push(speech.slice(1600));await f.push(new Float32Array(16000));
+ assert.deepEqual(f.events,[['start',1],['end',1]]);assert.deepEqual([...f.sent[0]],[...prefix]);await f.detector.destroy();
 });

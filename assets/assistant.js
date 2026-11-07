@@ -29,6 +29,7 @@ export default function(args) {
   turn(value){emit({kind:'voice_turn',...value});},
   commit(value){emit({kind:'live_commit',...value});},
   cancel(value){emit({kind:'cancel_tools',...value});},
+  buffered(ms){root.dataset.replyBufferMs=String(ms);},
   diagnostics(value){root.dataset.speechFrames=String(value.frames);root.dataset.speechAccepted=String(value.accepted);root.dataset.speechProbability=String(value.probability);},
   resources(value){root.dataset.connection=value.connection;root.dataset.track=value.track;},
   end(history,reason,turn){voiceStatus=reason;emit({kind:'voice_end',history,turn,session_id:current.data.credential?.session_id});controls();}

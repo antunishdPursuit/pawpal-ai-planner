@@ -226,3 +226,73 @@ test('production async inference failure stops voice without sending microphone 
  f.worklets.at(-1).port.onmessage({data:new Float32Array(1024).fill(.1)});await new Promise(setImmediate);
  assert.equal(f.live.isActive(),false);assert.equal(f.tracks[0].stopped,true);assert.equal(s.sent.filter(v=>v.realtimeInput).length,0);
 });
+
+
+test('post-playback reply prefix is sent only after fresh speech and preserves the earlier preview',async()=>{
+ const f=fixture();await f.live.start(credential);const s=f.sockets[0];s.onopen();
+ await s.onmessage({data:JSON.stringify({setupComplete:{}})});await s.onmessage({data:JSON.stringify({serverContent:{modelTurn:{parts:[{inlineData:{data:Buffer.alloc(4800).toString('base64')}}]},turnComplete:true}})});
+ f.players[0].onended();f.live.setPreview('at-first-word');
+ const prefix=new Float32Array(3200).fill(.23);f.worklets.at(-1).port.onmessage({data:prefix});
+ assert.equal(s.sent.filter(v=>v.realtimeInput).length,0);
+ f.live.setPreview('changed-during-guard');f.contexts[0].currentTime=.3;
+ f.worklets.at(-1).port.onmessage({data:new Float32Array(3200).fill(.11)});
+ assert.equal(s.sent.filter(v=>v.realtimeInput?.activityStart).length,1);
+ const audio=s.sent.filter(v=>v.realtimeInput?.audio).map(v=>Buffer.from(v.realtimeInput.audio.data,'base64'));
+ assert.equal(audio[0].readInt16LE(0),Math.round(.23*32767));assert.ok(audio.reduce((n,b)=>n+b.length/2,0)>=4800);
+ f.worklets.at(-1).port.onmessage({data:new Float32Array(16000)});
+ await s.onmessage({data:JSON.stringify({toolCall:{functionCalls:[{id:'buffered-call',name:'find_pets',args:{}}]}})});
+ assert.equal(f.events.find(v=>v[0]==='tool')[1].preview_id,'at-first-word');f.live.stop();
+});
+
+test('guard-buffered sounds alone never open a turn, and mute erases the prefix',async()=>{
+ const f=fixture();await f.live.start(credential);const s=f.sockets[0];s.onopen();
+ await s.onmessage({data:JSON.stringify({setupComplete:{}})});await s.onmessage({data:JSON.stringify({serverContent:{modelTurn:{parts:[{inlineData:{data:Buffer.alloc(4800).toString('base64')}}]},turnComplete:true}})});
+ f.players[0].onended();f.worklets.at(-1).port.onmessage({data:new Float32Array(3200).fill(.23)});
+ f.contexts[0].currentTime=.3;f.worklets.at(-1).port.onmessage({data:new Float32Array(16000)});
+ assert.equal(s.sent.filter(v=>v.realtimeInput).length,0);
+ await s.onmessage({data:JSON.stringify({serverContent:{modelTurn:{parts:[{inlineData:{data:Buffer.alloc(4800).toString('base64')}}]},turnComplete:true}})});
+ f.players[1].onended();f.worklets.at(-1).port.onmessage({data:new Float32Array(3200).fill(.23)});
+ f.live.setMuted(true);f.live.setMuted(false);f.contexts[0].currentTime=.6;speak(f);
+ const first=s.sent.find(v=>v.realtimeInput?.audio);assert.ok(first);
+ assert.notEqual(Buffer.from(first.realtimeInput.audio.data,'base64').readInt16LE(0),Math.round(.23*32767));f.live.stop();
+});
+
+
+test('48kHz held prefix is normalized before joining the neural 16kHz turn',async()=>{
+ const detector={frameSamples:512,reset(){},destroy(){},async process(frame){return frame.some(x=>x>.01)?.95:0;}};
+ const f=fixture(false,detector);await f.live.start(credential);const s=f.sockets[0];s.onopen();f.contexts[1].sampleRate=48000;
+ await s.onmessage({data:JSON.stringify({setupComplete:{}})});await s.onmessage({data:JSON.stringify({serverContent:{modelTurn:{parts:[{inlineData:{data:Buffer.alloc(4800).toString('base64')}}]},turnComplete:true}})});
+ f.players[0].onended();f.worklets.at(-1).port.onmessage({data:new Float32Array(9600).fill(.23)});
+ f.contexts[0].currentTime=.3;
+ for(let n=0;n<150;n++){f.worklets.at(-1).port.onmessage({data:new Float32Array(128).fill(.11)});await new Promise(setImmediate);}
+ const first=s.sent.find(v=>v.realtimeInput?.audio).realtimeInput.audio;
+ assert.equal(first.mimeType,'audio/pcm;rate=16000');assert.equal(Buffer.from(first.data,'base64').length,3200*2);assert.equal(Buffer.from(first.data,'base64').readInt16LE(0),Math.round(.23*32767));f.live.stop();
+});
+
+
+test('playback and reply lockout samples cannot ride into a later user prefix',async()=>{
+ const f=fixture();await f.live.start(credential);const s=f.sockets[0];s.onopen();
+ await s.onmessage({data:JSON.stringify({setupComplete:{}})});
+ const packet={serverContent:{modelTurn:{parts:[{inlineData:{data:Buffer.alloc(4800).toString('base64')}}]},turnComplete:true}};
+ await s.onmessage({data:JSON.stringify(packet)});
+ f.worklets.at(-1).port.onmessage({data:new Float32Array(3200).fill(.37)});
+ f.players[0].onended();f.contexts[0].currentTime=.3;speak(f);
+ let audio=s.sent.filter(v=>v.realtimeInput?.audio).map(v=>Buffer.from(v.realtimeInput.audio.data,'base64'));
+ assert.ok(audio.length);assert.ok(audio.every(b=>{for(let i=0;i<b.length;i+=2)if(b.readInt16LE(i)===Math.round(.37*32767))return false;return true;}));
+ await s.onmessage({data:JSON.stringify(packet)});
+ f.worklets.at(-1).port.onmessage({data:new Float32Array(3200).fill(.39)});
+ f.players[1].onended();f.contexts[0].currentTime=.6;speak(f);
+ audio=s.sent.filter(v=>v.realtimeInput?.audio).map(v=>Buffer.from(v.realtimeInput.audio.data,'base64'));
+ assert.ok(audio.every(b=>{for(let i=0;i<b.length;i+=2)if(b.readInt16LE(i)===Math.round(.39*32767))return false;return true;}));f.live.stop();
+});
+
+test('reply after playback but before server completion is buffered locally, never sent early',async()=>{
+ const f=fixture();await f.live.start(credential);const s=f.sockets[0];s.onopen();
+ await s.onmessage({data:JSON.stringify({setupComplete:{}})});
+ await s.onmessage({data:JSON.stringify({serverContent:{modelTurn:{parts:[{inlineData:{data:Buffer.alloc(4800).toString('base64')}}]}}})});
+ f.players[0].onended();f.worklets.at(-1).port.onmessage({data:new Float32Array(3200).fill(.23)});
+ f.contexts[0].currentTime=.3;assert.equal(s.sent.filter(v=>v.realtimeInput).length,0);
+ await s.onmessage({data:JSON.stringify({serverContent:{turnComplete:true}})});speak(f);
+ const audio=s.sent.find(v=>v.realtimeInput?.audio).realtimeInput.audio;
+ assert.equal(Buffer.from(audio.data,'base64').readInt16LE(0),Math.round(.23*32767));f.live.stop();
+});
