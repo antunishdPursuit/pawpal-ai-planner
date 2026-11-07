@@ -4,14 +4,14 @@ const fs=require('node:fs');
 const vm=require('node:vm');
 const source=fs.readFileSync('assets/assistant_audio.js','utf8').replaceAll('export function','function')+';globalThis.make=createLive;';
 function fixture(denied=false){
- const worklets=[],events=[],sockets=[],players=[],tracks=[{id:'track-one',stop(){this.stopped=true;}}];
- class Audio {constructor(){this.sampleRate=16000;this.currentTime=0;this.audioWorklet={addModule:async()=>{}};}async resume(){}async close(){this.closed=true;}createGain(){return {gain:{},connect(){},disconnect(){}};}createMediaStreamSource(){return {connect(){},disconnect(){}};}createBuffer(c,n,rate){return {duration:n/rate,getChannelData:()=>new Float32Array(n)};}createBufferSource(){const p={connect(){},start(){},stop(){},onended:null};players.push(p);return p;}}
+ const worklets=[],events=[],sockets=[],players=[],contexts=[],tracks=[{id:'track-one',stop(){this.stopped=true;}}];
+ class Audio {constructor(){contexts.push(this);this.sampleRate=16000;this.currentTime=0;this.audioWorklet={addModule:async()=>{}};}async resume(){}async close(){this.closed=true;}createGain(){return {gain:{},connect(){},disconnect(){}};}createMediaStreamSource(){return {connect(){},disconnect(){}};}createBuffer(c,n,rate){return {duration:n/rate,getChannelData:()=>new Float32Array(n)};}createBufferSource(){const p={connect(){},start(){},stop(){},onended:null};players.push(p);return p;}}
  class Worklet {constructor(){this.port={};worklets.push(this);}connect(){}disconnect(){}}
  class Socket {constructor(){this.readyState=1;this.sent=[];sockets.push(this);}send(value){this.sent.push(JSON.parse(value));}close(){this.closed=true;}}
  const env={AudioContext:Audio,AudioWorkletNode:Worklet,WebSocket:Socket,navigator:{mediaDevices:{getUserMedia:async()=>{if(denied)throw Object.assign(new Error(),{name:'NotAllowedError'});return {getTracks:()=>tracks};}}}};
  const sandbox={window:env,Blob,URL,Map,Set,Uint8Array,DataView,Float32Array,setTimeout,clearTimeout,atob,btoa};vm.createContext(sandbox);vm.runInContext(source,sandbox);
  const live=sandbox.make({phase:v=>events.push(['phase',v]),end:(h,r)=>events.push(['end',r]),transcript:(r,t)=>events.push(['text',t]),tool:v=>events.push(['tool',v]),turn:v=>events.push(['turn',v]),commit:v=>events.push(['commit',v]),cancel:v=>events.push(['cancel',v]),resources:v=>events.push(['resources',v]),detector:async()=>({process:frame=>frame.some(x=>Math.abs(x)>.01),destroy(){}})},env);
- return {live,events,sockets,tracks,env,worklets,players};
+ return {live,events,sockets,tracks,env,worklets,players,contexts};
 }
 function speak(f){f.worklets.at(-1).port.onmessage({data:new Float32Array(8000).fill(.1)});f.worklets.at(-1).port.onmessage({data:new Float32Array(16000)});}
 const credential={token:'test-only',model:'test-model',session_id:'test-session'};
@@ -167,8 +167,37 @@ test('provider interruption does not replace an in-progress hearing cue',async()
 
 test('opening greeting blocks all capture until generated audio finishes playing',async()=>{
  const f=fixture();await f.live.start(credential);const s=f.sockets[0];s.onopen();await s.onmessage({data:JSON.stringify({setupComplete:{}})});
- speak(f);assert.equal(f.events.filter(x=>x[0]==='turn').length,0);
+ speak(f);assert.equal(f.events.filter(x=>x[0]==='turn').length,0);assert.equal(s.sent.filter(x=>x.realtimeInput?.audio||x.realtimeInput?.activityStart).length,0);
  await s.onmessage({data:JSON.stringify({serverContent:{modelTurn:{parts:[{inlineData:{data:Buffer.alloc(4800).toString('base64')}}]},turnComplete:true}})});
- speak(f);assert.equal(f.events.filter(x=>x[0]==='turn').length,0);
+ speak(f);assert.equal(f.events.filter(x=>x[0]==='turn').length,0);assert.equal(s.sent.filter(x=>x.realtimeInput?.audio||x.realtimeInput?.activityStart).length,0);
  f.players[0].onended();speak(f);assert.equal(f.events.filter(x=>x[0]==='turn'&&x[1].closed).length,1);f.live.stop();
+});
+
+test('later reply allows interruption only after two seconds of actual playback',async()=>{
+ const f=fixture();await f.live.start(credential);const s=f.sockets[0];s.onopen();await s.onmessage({data:JSON.stringify({setupComplete:{}})});await s.onmessage({data:JSON.stringify({serverContent:{turnComplete:true}})});
+ await s.onmessage({data:JSON.stringify({serverContent:{modelTurn:{parts:[{inlineData:{data:Buffer.alloc(240000).toString('base64')}}]}}})});
+ speak(f);assert.equal(f.events.filter(x=>x[0]==='turn').length,0);
+ f.contexts[0].currentTime=2.1;speak(f);assert.equal(f.events.filter(x=>x[0]==='turn'&&x[1].closed).length,1);f.live.stop();
+});
+
+test('mute and unmute while connecting cannot release the greeting gate',async()=>{
+ const f=fixture();const starting=f.live.start(credential);f.live.setMuted(true);f.live.setMuted(false);await starting;const s=f.sockets[0];s.onopen();await s.onmessage({data:JSON.stringify({setupComplete:{}})});speak(f);assert.equal(f.events.filter(x=>x[0]==='turn'&&x[1].closed).length,0);f.live.stop();
+});
+
+test('in-flight reply audio cannot restart playback or gate an open interruption',async()=>{
+ const f=fixture();await f.live.start(credential);const s=f.sockets[0];s.onopen();await s.onmessage({data:JSON.stringify({setupComplete:{}})});await s.onmessage({data:JSON.stringify({serverContent:{turnComplete:true}})});
+ const reply={serverContent:{modelTurn:{parts:[{inlineData:{data:Buffer.alloc(240000).toString('base64')}}]}}};await s.onmessage({data:JSON.stringify(reply)});
+ f.contexts[0].currentTime=2.1;const push=data=>f.worklets.at(-1).port.onmessage({data});push(new Float32Array(3200).fill(.1));
+ const count=s.sent.filter(x=>x.realtimeInput?.audio).length;
+ await s.onmessage({data:JSON.stringify(reply)});assert.equal(f.players.length,1);
+ await s.onmessage({data:JSON.stringify({serverContent:{interrupted:true}})});await s.onmessage({data:JSON.stringify(reply)});assert.equal(f.players.length,1);
+ push(new Float32Array(3200).fill(.1));push(new Float32Array(16000));assert.ok(s.sent.filter(x=>x.realtimeInput?.audio).length>count);assert.equal(f.events.filter(x=>x[0]==='turn'&&x[1].closed).length,1);
+ await s.onmessage({data:JSON.stringify(reply)});assert.equal(f.players.length,2);f.live.stop();
+});
+
+test('interrupting a fully generated reply does not discard the next answer',async()=>{
+ const f=fixture();await f.live.start(credential);const s=f.sockets[0];s.onopen();await s.onmessage({data:JSON.stringify({setupComplete:{}})});await s.onmessage({data:JSON.stringify({serverContent:{turnComplete:true}})});
+ const reply={serverContent:{modelTurn:{parts:[{inlineData:{data:Buffer.alloc(240000).toString('base64')}}]},turnComplete:true}};
+ await s.onmessage({data:JSON.stringify(reply)});f.contexts[0].currentTime=2.1;speak(f);
+ await s.onmessage({data:JSON.stringify(reply)});assert.equal(f.players.length,2);f.live.stop();
 });
