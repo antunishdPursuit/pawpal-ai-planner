@@ -126,7 +126,7 @@ export function createSable(canvas, button, assets, env=window) {
  }).catch(()=>{if(!disposed){button.dataset.art='unavailable';canvas.hidden=true;}});
  function arrive(trip){
   trip.arrived=true;
-  if(trip.entering){navigation=null;x=0;desired=trip.restore;reconcile();draw();}
+  if(trip.entering){navigation=null;x=0;desired=trip.restore;if(paused)play(cues.has(desired)?desired:'awake');else reconcile();draw();}
   trip.done();
  }
  function navigate(done,entering=false){

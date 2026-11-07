@@ -88,7 +88,7 @@ test('page entrance starts offscreen and runs left to the resting position',asyn
 
 test('entrance skips safely when paused and resize does not snap a traveling sprite home',async()=>{
  const f=await fixture();f.pet.setPaused(true);let entered=0;
- f.pet.navigate(()=>entered++,true);assert.equal(entered,1);assert.equal(f.canvas.dataset.x,'0');
+ f.pet.navigate(()=>entered++,true);assert.equal(entered,1);assert.equal(f.canvas.dataset.x,'0');assert.notEqual(f.canvas.dataset.state,'run');
  f.pet.setPaused(false);f.pet.navigate(()=>entered++,true);f.advance(200);
  const x=f.canvas.dataset.x;f.env.innerWidth=320;f.env.emit('resize');assert.equal(f.canvas.dataset.x,x);
  f.advance(600);assert.equal(entered,2);assert.equal(f.canvas.dataset.x,'0');f.pet.cleanup();
