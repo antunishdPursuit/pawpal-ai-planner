@@ -24,9 +24,12 @@ def assistant_component():
         "pawpal_assistant", html='<div class="paw-assistant-root"></div>'
         '<div class="paw-sable-assets" hidden>' + html.escape(json.dumps(companion_assets())) + '</div>'
         '<div class="paw-voice-detector" hidden>' + base64.b64encode(
-            (root / "vendor/libfvad/libfvad.wasm").read_bytes()).decode() + '</div>',
+            (root / "vendor/silero/silero_vad_v5.onnx").read_bytes()).decode() + '</div>'
+        '<div class="paw-voice-wasm" hidden>' + base64.b64encode(
+            (root / "vendor/onnxruntime/ort-wasm-simd.wasm").read_bytes()).decode() + '</div>',
         css=(root / "assistant.css").read_text(encoding="utf-8"),
-        js=(root / "assistant_vad.js").read_text(encoding="utf-8") + "\n" +
+        js=(root / "vendor/onnxruntime/ort.wasm.min.js").read_text(encoding="utf-8") + "\n" +
+           (root / "assistant_vad.js").read_text(encoding="utf-8") + "\n" +
            (root / "assistant_audio.js").read_text(encoding="utf-8") + "\n" +
            (root / "sable.js").read_text(encoding="utf-8") + "\n" +
            (root / "assistant.js").read_text(encoding="utf-8"), isolate_styles=False,

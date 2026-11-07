@@ -1,0 +1,4 @@
+# Preserve pinned upstream runtime and licence bytes on Windows checkouts.
+assets/vendor/onnxruntime/ort.wasm.min.js -text
+assets/vendor/onnxruntime/LICENSE -text
+assets/vendor/silero/LICENSE -text

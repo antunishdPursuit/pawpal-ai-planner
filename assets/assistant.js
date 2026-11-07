@@ -21,7 +21,7 @@ export default function(args) {
  function greet(){greetingUntil=Date.now()+2500;clearTimeout(greetingTimer);greetingTimer=setTimeout(()=>{if(!disposed)controls();},2500);}
  function idle(){clearTimeout(idleTimer);idleTimer=setTimeout(()=>{if(disposed||!panel.hidden)return;pet.wander();idle();},45000);}
  const audio=createLive({
-  detector:()=>createVoiceDetector(host.querySelector('.paw-voice-detector').textContent),
+  detector:()=>createVoiceDetector(host.querySelector('.paw-voice-detector').textContent,host.querySelector('.paw-voice-wasm').textContent),
   phase(value){voicePhase=value;voiceStatus={idle:'Voice stopped. You can keep chatting.',connecting:'Connecting microphone...',listening:'Microphone on. Listening...',hearing:'Speech detected. Listening...',muted:'Microphone muted. PawPal cannot hear you.',speaking:'PawPal is speaking...',working:'Working in PawPal...'}[value];controls();},
   mute(){controls();},
   transcript(role,value){if(lastRole===role&&log.lastElementChild){log.lastElementChild.append(document.createTextNode(value));log.scrollTop=log.scrollHeight;}else message(role,value);lastRole=role;},
@@ -29,6 +29,7 @@ export default function(args) {
   turn(value){emit({kind:'voice_turn',...value});},
   commit(value){emit({kind:'live_commit',...value});},
   cancel(value){emit({kind:'cancel_tools',...value});},
+  diagnostics(value){root.dataset.speechFrames=String(value.frames);root.dataset.speechAccepted=String(value.accepted);root.dataset.speechProbability=String(value.probability);},
   resources(value){root.dataset.connection=value.connection;root.dataset.track=value.track;},
   end(history,reason,turn){voiceStatus=reason;emit({kind:'voice_end',history,turn,session_id:current.data.credential?.session_id});controls();}
  });

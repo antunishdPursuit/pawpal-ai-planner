@@ -2,15 +2,15 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
-const source=fs.readFileSync('assets/assistant_audio.js','utf8').replaceAll('export function','function')+';globalThis.make=createLive;';
-function fixture(denied=false){
+const source=fs.readFileSync('assets/assistant_vad.js','utf8').replaceAll('export async function','async function').replaceAll('export function','function')+'\n'+fs.readFileSync('assets/assistant_audio.js','utf8').replaceAll('export function','function')+';globalThis.make=createLive;';
+function fixture(denied=false,detectorOverride=null){
  const worklets=[],events=[],sockets=[],players=[],contexts=[],tracks=[{id:'track-one',stop(){this.stopped=true;}}];
  class Audio {constructor(){contexts.push(this);this.sampleRate=16000;this.currentTime=0;this.audioWorklet={addModule:async()=>{}};}async resume(){}async close(){this.closed=true;}createGain(){return {gain:{},connect(){},disconnect(){}};}createMediaStreamSource(){return {connect(){},disconnect(){}};}createBuffer(c,n,rate){return {duration:n/rate,getChannelData:()=>new Float32Array(n)};}createBufferSource(){const p={connect(){},start(){},stop(){},onended:null};players.push(p);return p;}}
  class Worklet {constructor(){this.port={};worklets.push(this);}connect(){}disconnect(){}}
  class Socket {constructor(){this.readyState=1;this.sent=[];sockets.push(this);}send(value){this.sent.push(JSON.parse(value));}close(){this.closed=true;}}
  const env={AudioContext:Audio,AudioWorkletNode:Worklet,WebSocket:Socket,navigator:{mediaDevices:{getUserMedia:async()=>{if(denied)throw Object.assign(new Error(),{name:'NotAllowedError'});return {getTracks:()=>tracks};}}}};
  const sandbox={window:env,Blob,URL,Map,Set,Uint8Array,DataView,Float32Array,setTimeout,clearTimeout,atob,btoa};vm.createContext(sandbox);vm.runInContext(source,sandbox);
- const live=sandbox.make({phase:v=>events.push(['phase',v]),end:(h,r)=>events.push(['end',r]),transcript:(r,t)=>events.push(['text',t]),tool:v=>events.push(['tool',v]),turn:v=>events.push(['turn',v]),commit:v=>events.push(['commit',v]),cancel:v=>events.push(['cancel',v]),resources:v=>events.push(['resources',v]),detector:async()=>({process:frame=>frame.some(x=>Math.abs(x)>.01),destroy(){}})},env);
+ const live=sandbox.make({phase:v=>events.push(['phase',v]),end:(h,r)=>events.push(['end',r]),transcript:(r,t)=>events.push(['text',t]),tool:v=>events.push(['tool',v]),turn:v=>events.push(['turn',v]),commit:v=>events.push(['commit',v]),cancel:v=>events.push(['cancel',v]),resources:v=>events.push(['resources',v]),detector:async()=>detectorOverride||({process:frame=>frame.some(x=>Math.abs(x)>.01),destroy(){}})},env);
  return {live,events,sockets,tracks,env,worklets,players,contexts};
 }
 function speak(f){f.worklets.at(-1).port.onmessage({data:new Float32Array(8000).fill(.1)});f.worklets.at(-1).port.onmessage({data:new Float32Array(16000)});}
@@ -170,7 +170,7 @@ test('opening greeting blocks all capture until generated audio finishes playing
  speak(f);assert.equal(f.events.filter(x=>x[0]==='turn').length,0);assert.equal(s.sent.filter(x=>x.realtimeInput?.audio||x.realtimeInput?.activityStart).length,0);
  await s.onmessage({data:JSON.stringify({serverContent:{modelTurn:{parts:[{inlineData:{data:Buffer.alloc(4800).toString('base64')}}]},turnComplete:true}})});
  speak(f);assert.equal(f.events.filter(x=>x[0]==='turn').length,0);assert.equal(s.sent.filter(x=>x.realtimeInput?.audio||x.realtimeInput?.activityStart).length,0);
- f.players[0].onended();speak(f);assert.equal(f.events.filter(x=>x[0]==='turn'&&x[1].closed).length,1);f.live.stop();
+ f.players[0].onended();speak(f);assert.equal(f.events.filter(x=>x[0]==='turn').length,0);f.contexts[0].currentTime=.3;speak(f);assert.equal(f.events.filter(x=>x[0]==='turn'&&x[1].closed).length,1);f.live.stop();
 });
 
 test('later reply allows interruption only after two seconds of actual playback',async()=>{
@@ -200,4 +200,29 @@ test('interrupting a fully generated reply does not discard the next answer',asy
  const reply={serverContent:{modelTurn:{parts:[{inlineData:{data:Buffer.alloc(240000).toString('base64')}}]},turnComplete:true}};
  await s.onmessage({data:JSON.stringify(reply)});f.contexts[0].currentTime=2.1;speak(f);
  await s.onmessage({data:JSON.stringify(reply)});assert.equal(f.players.length,2);f.live.stop();
+});
+
+
+test('production async gate rejects noise, preserves preview tags, and mute discards in-flight inference',async()=>{
+ let release,hold=false,destroyed=false;
+ const detector={frameSamples:512,reset(){},destroy(){destroyed=true;},async process(frame){if(hold){hold=false;await new Promise(r=>release=r);}return frame.some(x=>Math.abs(x)>.01)?.95:0;}};
+ const f=fixture(false,detector);await f.live.start(credential);const s=f.sockets[0];s.onopen();
+ await s.onmessage({data:JSON.stringify({setupComplete:{}})});await s.onmessage({data:JSON.stringify({serverContent:{turnComplete:true}})});
+ async function feed(chunk){for(let i=0;i<chunk.length;i+=128){f.worklets.at(-1).port.onmessage({data:chunk.slice(i,i+128)});await new Promise(setImmediate);}}
+ await feed(new Float32Array(3200));assert.equal(s.sent.filter(v=>v.realtimeInput).length,0);
+ hold=true;await feed(new Float32Array(1024).fill(.1));f.live.setMuted(true);release();await new Promise(setImmediate);
+ assert.equal(s.sent.filter(v=>v.realtimeInput?.audio||v.realtimeInput?.activityStart).length,0);
+ f.live.setMuted(false);f.live.setPreview('visible-before-speech');await feed(new Float32Array(6400).fill(.1));f.live.setPreview('later-preview');await feed(new Float32Array(20000));
+ await s.onmessage({data:JSON.stringify({toolCall:{functionCalls:[{id:'async-call',name:'find_pets',args:{}}]}})});
+ assert.equal(f.events.find(v=>v[0]==='tool')[1].preview_id,'visible-before-speech');
+ assert.equal(f.events.filter(v=>v[0]==='turn'&&v[1].closed).length,1);assert.ok(s.sent.some(v=>v.realtimeInput?.audio));
+ f.live.stop();assert.equal(destroyed,true);
+});
+
+test('production async inference failure stops voice without sending microphone audio',async()=>{
+ const detector={frameSamples:512,reset(){},destroy(){},async process(){throw Error('test inference failure');}};
+ const f=fixture(false,detector);await f.live.start(credential);const s=f.sockets[0];s.onopen();
+ await s.onmessage({data:JSON.stringify({setupComplete:{}})});await s.onmessage({data:JSON.stringify({serverContent:{turnComplete:true}})});
+ f.worklets.at(-1).port.onmessage({data:new Float32Array(1024).fill(.1)});await new Promise(setImmediate);
+ assert.equal(f.live.isActive(),false);assert.equal(f.tracks[0].stopped,true);assert.equal(s.sent.filter(v=>v.realtimeInput).length,0);
 });

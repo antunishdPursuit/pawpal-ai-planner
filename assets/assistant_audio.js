@@ -11,15 +11,15 @@ export function createSpeechTurns(callbacks,detector) {
   let offset=44;for(const chunk of record.chunks)for(const value of chunk){view.setInt16(offset,Math.round(Math.max(-1,Math.min(1,value))*32767),true);offset+=2;}
   let binary='';for(let i=0;i<bytes.length;i+=16384)binary+=String.fromCharCode(...bytes.subarray(i,i+16384));return btoa(binary);
  }
- function frame(chunk,rate){
+ function frame(chunk,rate,classification,preview){
   let energy=0;for(const value of chunk)energy+=value*value;
-  const rms=Math.sqrt(energy/chunk.length),classified=detector.process(chunk,rate);
+  const rms=Math.sqrt(energy/chunk.length),classified=classification===undefined?detector.process(chunk,rate):classification;
   if(!classified)noiseFloor=.98*noiseFloor+.02*Math.min(rms,.015);
   const voiced=classified&&rms>=Math.max(.002,noiseFloor*2);
   if(!current){
    pre.push(chunk.slice());preFrames+=chunk.length;
    while(preFrames>rate*.24&&pre.length>1)preFrames-=pre.shift().length;
-   if(voiced&&loudFrames===0)candidatePreview=callbacks.preview?.()||null;
+   if(voiced&&loudFrames===0)candidatePreview=preview===undefined?(callbacks.preview?.()||null):preview;
    loudFrames=voiced?loudFrames+chunk.length:0;
    if(loudFrames<rate*.1)return;
    current={turn:++turn,rate,chunks:pre,frames:preFrames,quiet:0,closed:false,preview_id:candidatePreview};last=current;
@@ -38,7 +38,7 @@ export function createSpeechTurns(callbacks,detector) {
   let i=0;for(;i+size<=combined.length;i+=size){frame(combined.slice(i,i+size),rate);if(current?.invalid)break;}
   remainder=combined.slice(i);
  }
- return {push,latest:()=>current||last,turn:()=>turn,encode:record=>wav(record),
+ return {push,pushClassified:(chunk,rate,voiced,preview)=>frame(chunk,rate,voiced,preview),clearCandidate(){pre=[];preFrames=loudFrames=0;remainder=new Float32Array(0);},latest:()=>current||last,turn:()=>turn,encode:record=>wav(record),
   invalidate(){const opened=Boolean(current);if(current)current.invalid=true;current=last=null;pre=[];preFrames=loudFrames=0;remainder=new Float32Array(0);return {turn:++turn,opened};}};
 }
 
@@ -46,9 +46,10 @@ export function createSpeechTurns(callbacks,detector) {
 export function createLive(callbacks, env=window) {
  let socket,stream,input,output,source,processor,silent,ready=false,credential;
  let timer,connectTimer,nextTime=0,history=[],turn=0,ended=true,generation=0,speech,visiblePreview=null,detector,muted=false,responseComplete=true,greetingPending=true,greetingGenerated=false,outputStarted=false,replyStartTime=null,dropReply=false;
+ let speechGate,captureAfter=0,classifiedFrames=0,acceptedFrames=0;
  const playing=new Set(),pending=new Map();
  const phase=value=>callbacks.phase(muted&&value==='listening'?'muted':value);
- function listening(){if(responseComplete&&!playing.size){if(greetingGenerated)greetingPending=false;outputStarted=false;replyStartTime=null;}const current=speech?.latest();phase(current&&!current.closed&&!current.invalid?'hearing':playing.size?'speaking':pending.size||!responseComplete?'working':'listening');}
+ function listening(){if(responseComplete&&!playing.size){if(outputStarted)captureAfter=output.currentTime+.25+(output.baseLatency||0)+(output.outputLatency||0);if(greetingGenerated)greetingPending=false;outputStarted=false;replyStartTime=null;}const current=speech?.latest();phase(current&&!current.closed&&!current.invalid?'hearing':playing.size?'speaking':pending.size||!responseComplete?'working':'listening');}
  function send(value){if(socket?.readyState===1)socket.send(JSON.stringify(value));}
  function stopPlayback(){for(const p of playing){try{p.stop();}catch{}}playing.clear();nextTime=0;outputStarted=false;replyStartTime=null;}
  function stop(reason='Voice stopped. You can keep chatting.'){
@@ -56,7 +57,7 @@ export function createLive(callbacks, env=window) {
   for(const item of pending.values())clearTimeout(item.timer);pending.clear();
   if(processor){processor.port.onmessage=null;processor.disconnect();}source?.disconnect();silent?.disconnect();
   stream?.getTracks().forEach(t=>t.stop());stopPlayback();
-  detector?.destroy();detector=null;
+  speechGate?.invalidate();speechGate=null;Promise.resolve(detector?.destroy()).catch(()=>{});detector=null;
   if(socket){socket.onmessage=null;socket.onerror=null;socket.onclose=null;socket.close();}
   input?.close().catch(()=>{});output?.close().catch(()=>{});
   socket=stream=input=output=source=processor=silent=null;
@@ -81,7 +82,7 @@ export function createLive(callbacks, env=window) {
   if(!env.navigator.mediaDevices?.getUserMedia||!env.AudioContext)throw new Error('unsupported');
   const capture=new env.AudioContext({sampleRate:16000});input=capture;await capture.resume();
   if(ended||attempt!==generation){capture.close().catch(()=>{});return;}
-  const acquired=await env.navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:true,noiseSuppression:true},video:false});
+  const acquired=await env.navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:true,noiseSuppression:true,autoGainControl:false},video:false});
   if(ended||attempt!==generation){acquired.getTracks().forEach(t=>t.stop());capture.close().catch(()=>{});return;}stream=acquired;
   stream.getTracks().forEach(t=>{t.enabled=!muted;});
   const code=`class Capture extends AudioWorkletProcessor {process(inputs){if(inputs[0]?.[0])this.port.postMessage(inputs[0][0].slice());return true;}}registerProcessor("pawpal-assistant-capture",Capture);`;
@@ -89,9 +90,17 @@ export function createLive(callbacks, env=window) {
   try{await capture.audioWorklet.addModule(url);}finally{URL.revokeObjectURL(url);}
   if(ended||attempt!==generation){acquired.getTracks().forEach(t=>t.stop());capture.close().catch(()=>{});return;}
   source=capture.createMediaStreamSource(stream);processor=new env.AudioWorkletNode(input,'pawpal-assistant-capture');silent=input.createGain();silent.gain.value=0;
-  processor.port.onmessage=({data:chunk})=>{const current=speech?.latest();const open=current&&!current.closed&&!current.invalid;if(ready&&!ended&&!muted&&!greetingPending&&(open||!outputStarted||output.currentTime-replyStartTime>=2)){try{speech.push(chunk,input.sampleRate);}catch{stop('Speech detection unavailable. You can still type.');}}};
+  processor.port.onmessage=({data:chunk})=>{
+   if(!captureAllowed()){speechGate?.invalidate();speech?.clearCandidate();return;}
+   try{if(speechGate)speechGate.push(chunk,input.sampleRate,visiblePreview);else speech.push(chunk,input.sampleRate);}
+   catch{stop('Speech detection unavailable. You can still type.');}
+  };
   source.connect(processor);processor.connect(silent);silent.connect(input.destination);
   callbacks.resources({connection:credential.session_id,track:stream.getTracks()[0]?.id||'active'});
+ }
+ function captureAllowed(){
+  const current=speech?.latest(),open=current&&!current.closed&&!current.invalid;
+  return ready&&!ended&&!muted&&!greetingPending&&output.currentTime>=captureAfter&&(open||!outputStarted||output.currentTime-replyStartTime>=2);
  }
  function sendAudio(chunk,rate){
   const bytes=new Uint8Array(chunk.length*2),view=new DataView(bytes.buffer);
@@ -107,7 +116,7 @@ export function createLive(callbacks, env=window) {
    utterance:[...history].reverse().find(i=>i.role==='user')?.text||'',history});
  }
  async function start(value){
-  if(!ended)return;const attempt=++generation;ended=false;credential=value;history=[];turn=0;speech=null;muted=false;responseComplete=true;greetingPending=true;greetingGenerated=false;dropReply=false;
+  if(!ended)return;const attempt=++generation;ended=false;credential=value;history=[];turn=0;speech=null;muted=false;responseComplete=true;greetingPending=true;greetingGenerated=false;dropReply=false;captureAfter=0;classifiedFrames=acceptedFrames=0;
   phase('connecting');
   try{
    const created=await callbacks.detector();
@@ -120,6 +129,12 @@ export function createLive(callbacks, env=window) {
    end(record){send({realtimeInput:{activityEnd:{}}});phase('working');callbacks.turn?.({session_id:credential.session_id,turn:record.turn,closed:true});for(const item of pending.values())dispatch(item);},
    error:stop
   },detector);
+  if(detector.frameSamples===512)speechGate=createSpeechGate(detector,(frame,probability,preview)=>{
+   if(!captureAllowed())return;
+   classifiedFrames++;if(probability>=.65)acceptedFrames++;
+   callbacks.diagnostics?.({frames:classifiedFrames,accepted:acceptedFrames,probability:Math.round(probability*1000)/1000});
+   speech.pushClassified(frame,16000,probability>=.65,preview);
+  },()=>stop('Speech detection unavailable. You can still type.'));
   try{
    connectTimer=setTimeout(()=>{if(attempt===generation)stop('Microphone permission was not received. Allow access and try again, or keep typing.');},25000);
    const speaker=new env.AudioContext({sampleRate:24000});output=speaker;await speaker.resume();
@@ -176,7 +191,7 @@ export function createLive(callbacks, env=window) {
  }
  function setMuted(value){
   if(ended||muted===Boolean(value))return;
-  muted=Boolean(value);stream?.getTracks().forEach(t=>{t.enabled=!muted;});
+  muted=Boolean(value);speechGate?.invalidate();stream?.getTracks().forEach(t=>{t.enabled=!muted;});
   if(muted&&speech){
    const invalid=speech.invalidate();turn=invalid.turn;
    callbacks.turn?.({session_id:credential.session_id,turn,closed:false});

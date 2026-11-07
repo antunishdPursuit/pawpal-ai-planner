@@ -1,0 +1,1 @@
+Synthetic English short-word controls (yes, no, stop), generated locally with Windows System.Speech SpeechSynthesizer at 16 kHz, 16-bit mono PCM. No user microphone recordings. These controls supplement the upstream recorded-speech fixture; they do not establish recognition quality for every speaker or accent.
