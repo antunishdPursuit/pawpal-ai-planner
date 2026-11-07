@@ -1,25 +1,51 @@
 """Persistent site-wide assistant component and event bridge."""
 from pathlib import Path
+import html
+import json
 from time import time
 import sqlite3
+import base64
 import streamlit as st
+from streamlit.runtime.scriptrunner import get_script_run_ctx
 from gemini_planner import is_configured, PlannerError
 from planner_storage import PlannerStore
 from assistant_actions import AssistantActions
 from assistant_model import respond
 from assistant_live import prepare_live
 from live_confirmation import stage_save, commit_save
+from sable_assets import companion_assets
 
 
 @st.cache_resource
 def assistant_component():
     root = Path(__file__).parent / "assets"
     return st.components.v2.component(
-        "pawpal_assistant", html='<div class="paw-assistant-root"></div>',
+        "pawpal_assistant", html='<div class="paw-assistant-root"></div>'
+        '<div class="paw-sable-assets" hidden>' + html.escape(json.dumps(companion_assets())) + '</div>'
+        '<div class="paw-voice-detector" hidden>' + base64.b64encode(
+            (root / "vendor/libfvad/libfvad.wasm").read_bytes()).decode() + '</div>',
         css=(root / "assistant.css").read_text(encoding="utf-8"),
-        js=(root / "assistant_audio.js").read_text(encoding="utf-8") + "\n" +
+        js=(root / "assistant_vad.js").read_text(encoding="utf-8") + "\n" +
+           (root / "assistant_audio.js").read_text(encoding="utf-8") + "\n" +
+           (root / "sable.js").read_text(encoding="utf-8") + "\n" +
            (root / "assistant.js").read_text(encoding="utf-8"), isolate_styles=False,
     )
+
+
+def suspend_assistant():
+    """Invalidate voice work when leaving the planner; keep conversation history."""
+    state = st.session_state.get("assistant_state", {})
+    session = state.pop("live_session", {})
+    if session.get("id"):
+        state.setdefault("terminated_sessions", set()).add(session["id"])
+    for key in ("live_calls", "live_verifications", "confirmation_transcripts"):
+        state.pop(key, None)
+    st.session_state.pop("assistant_credential", None)
+
+
+def rerun_assistant():
+    ctx = get_script_run_ctx()
+    st.rerun(scope="fragment" if ctx and ctx.fragment_ids_this_run else "app")
 
 
 def render_assistant():
@@ -40,14 +66,18 @@ def render_assistant():
     result = assistant_component()(key="site_assistant", data={
         "configured": is_configured(), "receipts": receipts,
         "page": st.session_state.get("page", "Home"),
+        "history": state["history"],
         "credential": st.session_state.get("assistant_credential"),
         "proposal": ({"id": pending["id"], "summary": pending["summary"], "conflicts": pending["conflicts"]} if pending else None),
     }, default={"outbox": []}, on_outbox_change=lambda: None, height=0)
-    handled = {r["id"] for r in receipts}
-    events = (result.outbox or [])[:32]
+    handled_order = state.setdefault("handled_events", [])
+    handled = set(handled_order) | {r["id"] for r in receipts}
+    queued = [e for e in (result.outbox or []) if isinstance(e, dict) and e.get("id") not in handled]
+    events = queued[:32]
     cancelled = state.setdefault("cancelled_calls", set())
     terminated = state.setdefault("terminated_sessions", set())
-    for item in events:
+    processed = False
+    for item in queued:
         session = state.get("live_session", {})
         if (isinstance(item, dict) and item.get("kind") == "voice_turn"
                 and item.get("session_id") == session.get("id") and type(item.get("turn")) is int
@@ -62,13 +92,20 @@ def render_assistant():
     for event in events:
         if not isinstance(event, dict) or event.get("id") in handled:
             continue
-        try:
-            actions = AssistantActions(PlannerStore().path, state)
-        except (OSError, sqlite3.Error):
-            receipts.append({"id": event["id"], "message": "Local storage is unavailable. Your chat is retained; try again."})
-            st.rerun()
+        processed = True
         receipt = {"id": event["id"]}
         kind = event.get("kind")
+        if kind in ("chat", "prepare_voice", "live_tool", "live_commit"):
+            try:
+                actions = AssistantActions(PlannerStore().path, state)
+            except (OSError, sqlite3.Error):
+                message = "Local storage is unavailable. Your chat is retained; try again."
+                receipt.update(message=message, failed=True)
+                if kind in ("live_tool", "live_commit"):
+                    receipt.update(call=event.get("call", {}), session_id=event.get("session_id"),
+                                   result={"ok": False, "error": message})
+                receipts.append(receipt)
+                rerun_assistant()
         if kind == "chat":
             if state.get("live_session", {}).get("active"):
                 receipt["message"] = "Stop voice before sending a typed message."
@@ -96,6 +133,8 @@ def render_assistant():
                 receipt["prepared"] = True
             except PlannerError as error:
                 receipt.update(message=str(error), failed=True)
+            except (OSError, sqlite3.Error):
+                receipt.update(message="Voice preparation failed. Try again, or keep typing.", failed=True)
         elif kind == "voice_start":
             session = state.get("live_session", {})
             if event.get("session_id") == session.get("id"):
@@ -127,13 +166,16 @@ def render_assistant():
                 turn = session["base_turn"] + (max(0, raw_turn) if type(raw_turn) is int else 0)
                 state["turn"] = max(state["turn"], turn)
                 if call.get("name") == "save_task" and kind == "live_tool":
-                    staged = stage_save(event, actions, session)
+                    try:
+                        staged = stage_save(event, actions, session)
+                    except (OSError, sqlite3.Error):
+                        staged = {"result": {"ok": False, "error": "Local storage is unavailable. Nothing was saved."}}
                     if staged.get("verification_id"):
                         receipt.update(call={"id":call["id"], "name":call["name"]},
                                        verification_id=staged["verification_id"], session_id=event.get("session_id"))
                         receipts.append(receipt)
                         del receipts[:-100]
-                        st.rerun()
+                        rerun_assistant()
                     response = staged["result"]
                 elif kind == "live_commit" and call.get("name") == "save_task":
                     response = commit_save(event, actions, session)
@@ -143,22 +185,29 @@ def render_assistant():
                     response = actions.execute(call.get("name"), call.get("args", {}),
                                                str(event.get("utterance", ""))[:2000], turn)
                 calls[call["id"]] = response
+            if response.get("saved"):
+                st.session_state["assistant_refresh"] = True
             receipt.update(call={"id":call.get("id"), "name":call.get("name")},
                            result=response, session_id=event.get("session_id"))
         elif kind == "voice_end":
             session = state.get("live_session", {})
-            if event.get("session_id") == session.get("id") and type(event.get("turn")) is int:
-                state["turn"] = max(state["turn"], session.get("base_turn", 0) + event["turn"])
-            history = event.get("history", [])
-            history = history if isinstance(history, list) else []
-            safe = [{"role":i["role"],"text":i["text"][:2000]} for i in history[-12:]
-                    if isinstance(i,dict) and i.get("role") in ("user","assistant") and isinstance(i.get("text"),str)]
-            state["history"] = (state["history"] + safe)[-20:]
-            st.session_state.pop("assistant_credential", None)
-            state.pop("live_session", None)
+            if session.get("id") and event.get("session_id") == session.get("id"):
+                if event.get("session_id") == session.get("id") and type(event.get("turn")) is int:
+                    state["turn"] = max(state["turn"], session.get("base_turn", 0) + event["turn"])
+                history = event.get("history", [])
+                history = history if isinstance(history, list) else []
+                safe = [{"role":i["role"],"text":i["text"][:2000]} for i in history[-12:]
+                        if isinstance(i,dict) and i.get("role") in ("user","assistant") and isinstance(i.get("text"),str)]
+                state["history"] = (state["history"] + safe)[-20:]
+                st.session_state.pop("assistant_credential", None)
+                state.pop("live_session", None)
         else:
             receipt["message"] = "That action is unavailable."
         receipts.append(receipt)
         del receipts[:-100]
-        st.rerun()
+        handled.add(event["id"])
+        handled_order.append(event["id"])
+        del handled_order[:-1024]
+    if processed:
+        rerun_assistant()
     return state.pop("route", None)

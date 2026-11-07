@@ -34,7 +34,7 @@ def tool(name, description, properties, required=()):
 
 TOOLS = [
     tool("get_context", "Refresh owner identities, focus, local today and timezones before relative dates. Does not navigate.", {}),
-    tool("list_owners", "List current local demo owners and open owner selection.", {}),
+    tool("list_owners", "List and count current local demo users, owners or profiles (the same people), and open owner selection. Not authenticated platform accounts.", {}),
     tool("find_pets", "Find pets and their owners by name. A unique match opens its owner's Pets screen; ask about multiple matches.",
          {"query": field_schema("string")}, ["query"]),
     tool("find_tasks", "Find saved tasks and their repeat schedules by title, optionally within an owner/pet. A unique match opens its calendar.",
@@ -120,8 +120,9 @@ class AssistantActions:
             return {"ok": True, "context": self.context()}
         if name == "list_owners":
             self.state["route"] = {"page": "User"}
-            return {"ok": True, "owners": [{"owner_id": p.owner_id, "name": p.name, "pets": p.pet_count}
-                                           for p in self.root.list_profiles()]}
+            owners = [{"owner_id": p.owner_id, "name": p.name, "pets": p.pet_count}
+                      for p in self.root.list_profiles()]
+            return {"ok": True, "owners": owners, "count": len(owners), "scope": "local demo profiles"}
         if name == "find_pets":
             query = args["query"].strip().casefold()
             if not query or len(query) > 80:

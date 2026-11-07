@@ -4,17 +4,27 @@ const fs=require('node:fs');
 const vm=require('node:vm');
 const source=fs.readFileSync('assets/assistant_audio.js','utf8').replaceAll('export function','function')+';globalThis.make=createLive;';
 function fixture(denied=false){
- const worklets=[],events=[],sockets=[],tracks=[{id:'track-one',stop(){this.stopped=true;}}];
- class Audio {constructor(){this.sampleRate=16000;this.currentTime=0;this.audioWorklet={addModule:async()=>{}};}async resume(){}async close(){this.closed=true;}createGain(){return {gain:{},connect(){},disconnect(){}};}createMediaStreamSource(){return {connect(){},disconnect(){}};}}
+ const worklets=[],events=[],sockets=[],players=[],tracks=[{id:'track-one',stop(){this.stopped=true;}}];
+ class Audio {constructor(){this.sampleRate=16000;this.currentTime=0;this.audioWorklet={addModule:async()=>{}};}async resume(){}async close(){this.closed=true;}createGain(){return {gain:{},connect(){},disconnect(){}};}createMediaStreamSource(){return {connect(){},disconnect(){}};}createBuffer(c,n,rate){return {duration:n/rate,getChannelData:()=>new Float32Array(n)};}createBufferSource(){const p={connect(){},start(){},stop(){},onended:null};players.push(p);return p;}}
  class Worklet {constructor(){this.port={};worklets.push(this);}connect(){}disconnect(){}}
  class Socket {constructor(){this.readyState=1;this.sent=[];sockets.push(this);}send(value){this.sent.push(JSON.parse(value));}close(){this.closed=true;}}
  const env={AudioContext:Audio,AudioWorkletNode:Worklet,WebSocket:Socket,navigator:{mediaDevices:{getUserMedia:async()=>{if(denied)throw Object.assign(new Error(),{name:'NotAllowedError'});return {getTracks:()=>tracks};}}}};
  const sandbox={window:env,Blob,URL,Map,Set,Uint8Array,DataView,Float32Array,setTimeout,clearTimeout,atob,btoa};vm.createContext(sandbox);vm.runInContext(source,sandbox);
- const live=sandbox.make({phase:v=>events.push(['phase',v]),end:(h,r)=>events.push(['end',r]),transcript:(r,t)=>events.push(['text',t]),tool:v=>events.push(['tool',v]),turn:v=>events.push(['turn',v]),commit:v=>events.push(['commit',v]),cancel:v=>events.push(['cancel',v]),resources:v=>events.push(['resources',v])},env);
- return {live,events,sockets,tracks,env,worklets};
+ const live=sandbox.make({phase:v=>events.push(['phase',v]),end:(h,r)=>events.push(['end',r]),transcript:(r,t)=>events.push(['text',t]),tool:v=>events.push(['tool',v]),turn:v=>events.push(['turn',v]),commit:v=>events.push(['commit',v]),cancel:v=>events.push(['cancel',v]),resources:v=>events.push(['resources',v]),detector:async()=>({process:frame=>frame.some(x=>Math.abs(x)>.01),destroy(){}})},env);
+ return {live,events,sockets,tracks,env,worklets,players};
 }
 function speak(f){f.worklets.at(-1).port.onmessage({data:new Float32Array(8000).fill(.1)});f.worklets.at(-1).port.onmessage({data:new Float32Array(16000)});}
 const credential={token:'test-only',model:'test-model',session_id:'test-session'};
+
+test('spoken input shows listening then working as soon as the utterance closes',async()=>{
+ const f=fixture();await f.live.start(credential);const s=f.sockets[0];s.onopen();await s.onmessage({data:JSON.stringify({setupComplete:{}})});
+ const push=data=>f.worklets.at(-1).port.onmessage({data});push(new Float32Array(3200).fill(.1));
+ assert.equal(f.events.filter(e=>e[0]==='phase').at(-1)[1],'hearing');
+ push(new Float32Array(16000));assert.equal(f.events.filter(e=>e[0]==='phase').at(-1)[1],'working');
+ assert.equal(f.events.filter(e=>e[0]==='turn'&&e[1].closed).length,1);
+ await s.onmessage({data:JSON.stringify({serverContent:{turnComplete:true}})});
+ assert.equal(f.events.filter(e=>e[0]==='phase').at(-1)[1],'listening');f.live.stop();
+});
 test('save receipt returns to same socket without stopping voice, and next action works',async()=>{
  const f=fixture();await f.live.start(credential);const socket=f.sockets[0];socket.onopen();
  await socket.onmessage({data:JSON.stringify({setupComplete:{}})});
@@ -96,7 +106,7 @@ test('tool request waits for utterance closure, including a negative suffix afte
  assert.equal(f.events.filter(e=>e[0]==='tool').length,0);
  push(new Float32Array(3200).fill(.1));push(new Float32Array(16000));
  const tool=f.events.find(e=>e[0]==='tool')[1];const raw=Buffer.from(tool.audio,'base64');
- assert.equal(raw.readUInt32LE(40),(3200+8000+3200+16000)*2);
+ assert.equal(raw.readUInt32LE(40),(3200+8000+3200+14400)*2);
  assert.equal(f.events.filter(e=>e[0]==='turn'&&e[1].closed).length,1);f.live.stop();
 });
 test('Stop or a newer utterance prevents committing a delayed verified confirmation',async()=>{
@@ -122,4 +132,35 @@ test('speech stays bound to the preview visible at its first voiced samples',asy
  push(new Float32Array(8000).fill(.1));push(new Float32Array(16000));
  await s.onmessage({data:JSON.stringify({toolCall:{functionCalls:[{id:'save',name:'save_task',args:{proposal_id:'late-preview'}}]}})});
  assert.equal(f.events.find(e=>e[0]==='tool')[1].preview_id,null);f.live.stop();
+});
+
+test('mute invalidates an open confirmation, pairs activityEnd, blocks capture and resumes on the same socket',async()=>{
+ const f=fixture();await f.live.start(credential);const s=f.sockets[0];s.onopen();await s.onmessage({data:JSON.stringify({setupComplete:{}})});
+ const push=data=>f.worklets.at(-1).port.onmessage({data});push(new Float32Array(3200).fill(.1));
+ await s.onmessage({data:JSON.stringify({toolCall:{functionCalls:[{id:'save',name:'save_task',args:{}}]}})});
+ f.live.setMuted(true);assert.equal(f.tracks[0].enabled,false);assert.equal(f.live.isActive(),true);
+ assert.equal(s.sent.filter(x=>x.realtimeInput?.activityStart).length,1);assert.equal(s.sent.filter(x=>x.realtimeInput?.activityEnd).length,1);
+ const count=s.sent.length;speak(f);assert.equal(s.sent.length,count);
+ f.live.receipt({session_id:'test-session',call:{id:'save'},verification_id:'late'});assert.equal(f.events.filter(x=>x[0]==='commit').length,0);
+ f.live.setMuted(false);assert.equal(f.tracks[0].enabled,true);speak(f);assert.equal(f.sockets.length,1);assert.equal(f.events.filter(x=>x[0]==='turn'&&x[1].closed).length,1);f.live.stop();
+});
+test('speaking continues until all scheduled audio ends, including a tool receipt',async()=>{
+ const f=fixture();await f.live.start(credential);const s=f.sockets[0];s.onopen();await s.onmessage({data:JSON.stringify({setupComplete:{}})});speak(f);
+ await s.onmessage({data:JSON.stringify({toolCall:{functionCalls:[{id:'owners',name:'list_owners',args:{}}]}})});
+ await s.onmessage({data:JSON.stringify({serverContent:{modelTurn:{parts:[{inlineData:{data:Buffer.alloc(4800).toString('base64')}}]},turnComplete:true}})});
+ f.live.receipt({session_id:'test-session',call:{id:'owners'},result:{ok:true}});assert.equal(f.events.filter(x=>x[0]==='phase').at(-1)[1],'speaking');
+ f.players[0].onended();assert.equal(f.events.filter(x=>x[0]==='phase').at(-1)[1],'listening');f.live.stop();
+});
+
+test('muting before permission arrives disables the eventual track',async()=>{
+ const f=fixture();let allow;f.env.navigator.mediaDevices.getUserMedia=()=>new Promise(r=>{allow=r;});
+ const starting=f.live.start(credential);await new Promise(r=>setImmediate(r));f.live.setMuted(true);
+ allow({getTracks:()=>f.tracks});await starting;assert.equal(f.tracks[0].enabled,false);assert.equal(f.live.isMuted(),true);f.live.stop();
+});
+
+test('provider interruption does not replace an in-progress hearing cue',async()=>{
+ const f=fixture();await f.live.start(credential);const s=f.sockets[0];s.onopen();await s.onmessage({data:JSON.stringify({setupComplete:{}})});
+ f.worklets.at(-1).port.onmessage({data:new Float32Array(3200).fill(.1)});
+ await s.onmessage({data:JSON.stringify({serverContent:{interrupted:true}})});
+ assert.equal(f.events.filter(x=>x[0]==='phase').at(-1)[1],'hearing');f.live.stop();
 });

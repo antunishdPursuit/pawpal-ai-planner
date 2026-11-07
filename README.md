@@ -7,10 +7,10 @@ The planner combines persistent local storage, a personal calendar, and Gemini-a
 ## What it does
 
 - Organize pets and care tasks in a personal calendar for the active pet owner.
-- Use the bottom-right assistant from any page: type a message or prepare and start live voice.
+- In the planner (User, Pets and Calendar), hover over or focus Sable to wake her, and select her to open the assistant. She reacts while listening, processing a request, and replying. Animation can be paused independently of voice and respects reduced-motion preferences.
 - Find owners, pets, tasks and repeat schedules; open the relevant profile or calendar.
 - Create tasks through the assistant after explicit confirmation, or use the text-only Conversation and Manual task dialog.
-- Continue chatting after saving. Stop or minimize the assistant to release the microphone.
+- Continue chatting after saving. Mute the microphone to pause input while staying connected; Stop or minimize releases it. Speech detection runs locally using the bundled WebRTC detector.
 - Demo access covers all local profiles, including newly created records; profiles are not authenticated accounts.
 - Review and edit the pet, date, time, recurrence, and location before saving. AI requests without a time prompt a follow-up question; Anytime must be explicitly chosen. Ambiguous requests prompt clarification; conflicting start times across future recurrences require confirmation.
 - Keep profiles, pets, tasks, and completion history in local SQLite storage.
@@ -34,7 +34,7 @@ For optional fictional presentation data, run `python seed_demo.py`. It adds thr
 
 ## How it works
 
-Gemini turns a request into a structured proposal. Local code validates the fields and registered pet, then presents an editable preview. A person confirms through the task dialog or the site-wide assistant; the storage layer validates again, saves once, and reads the task back. Manual entry uses the same validation and confirmation flow. Live saves verify the complete spoken confirmation with a separate short transcription request. Delayed Live transcripts cannot authorize a save; Stop, a newer request, or a changed preview during verification prevents committing it. Each spoken request is limited to 30 seconds.
+Gemini turns a request into a structured proposal. Local code validates the fields and registered pet, then presents an editable preview. A person confirms through the task dialog or the planner assistant; the storage layer validates again, saves once, and reads the task back. Manual entry uses the same validation and confirmation flow. Live saves verify the complete spoken confirmation with a separate short transcription request. Delayed Live transcripts cannot authorize a save; Stop, a newer request, or a changed preview during verification prevents committing it. Each spoken request is limited to 30 seconds.
 
 [Architecture diagram](diagrams/architecture.mmd) · [Data model (ERD)](diagrams/erd.mmd) · [Responsible-AI model card](model_card.md)
 

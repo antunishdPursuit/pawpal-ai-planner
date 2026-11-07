@@ -31,6 +31,14 @@ def test_new_records_and_ambiguous_search_are_dynamic(tmp_path):
     assert a.execute("show_pets",{"owner_id":new.owner_id})["pets"][0]["pet_id"]==newpet.pet_id
 
 
+def test_user_count_is_fresh_and_scoped_to_local_owner_profiles(tmp_path):
+    root,o1,o2,p1,p2,a=fixture(tmp_path)
+    result=a.execute("list_owners",{})
+    assert result["count"]==2 and result["scope"]=="local demo profiles"
+    root.create_profile("Another user")
+    assert a.execute("list_owners",{})["count"]==3
+
+
 def test_confirmed_save_is_targeted_and_idempotent_and_conversation_can_continue(tmp_path):
     root,o1,o2,p1,p2,a=fixture(tmp_path)
     result=preview(a,o2,p2)

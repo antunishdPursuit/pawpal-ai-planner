@@ -16,6 +16,10 @@ def prepare_live(context, history):
         raise PlannerError("Gemini is not configured. You can still use Manual task entry.")
     now = datetime.now(timezone.utc)
     instruction = INSTRUCTION + """\nSpeak briefly and naturally. You are available before owner selection.
+Allow natural pauses and corrections. Ask one question at a time. If speech is
+unclear, ask the user to repeat it; never invent words from silence or noise.
+Accept corrections such as 'that is not what I said'. Confirm ambiguous numbers
+and times before preparing a task. Do not treat background sounds as requests.
 Call tools for app operations and wait for their results. Never say a task was
 saved until save_task returns ok and saved. If the task has no time, say that
 its time is missing and ask the user to provide a time, including AM or PM.

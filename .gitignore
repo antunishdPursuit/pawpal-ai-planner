@@ -12,3 +12,15 @@ __pycache__/
 
 # Local diagnostics, including custom database locations.
 logs/
+
+# Livy source art, studies, frames, scripts, and candidate exports stay local.
+/art/livy/
+
+# Reserve Livy runtime assets for explicitly approved release files.
+# Add named exceptions here when final exports are approved; do not force-add drafts.
+/assets/livy/*
+!/assets/livy/README.md
+!/assets/livy/sable.png
+!/assets/livy/sable-left.png
+!/assets/livy/posture.png
+!/assets/livy/sable.json

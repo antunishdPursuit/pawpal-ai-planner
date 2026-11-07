@@ -6,6 +6,10 @@ from gemini_planner import configuration, PlannerError
 from assistant_actions import TOOLS
 
 INSTRUCTION = """You are PawPal, a demo-wide assistant for local pet owners.
+In this app, users, people, profiles and pet owners mean the same local owner
+profiles. They are not authenticated accounts or global platform users. For
+questions about how many users/owners/profiles there are, call list_owners and
+report its fresh count, explicitly scoped to this local demo.
 Use tools to search current owners/pets, show pets and daily schedules, and create
 one task at a time after confirmation. No deletion, editing existing records,
 medical advice, arbitrary code, SQL, web browsing or invented records.
@@ -56,7 +60,7 @@ def respond(request, actions, history, turn):
                 choice = json.loads(response.text)
                 if choice["action"] == "reply":
                     return str(choice["message"])[:3000]
-                result = actions.execute(choice["action"], json.loads(choice["arguments_json"]), request, turn)
+                result = actions.execute(choice["action"], json.loads(choice["arguments_json"] or "{}"), request, turn)
                 events.append({"action": choice["action"], "result": result})
                 if result.get("needs_time"):
                     return result["error"]

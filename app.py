@@ -15,7 +15,7 @@ from gemini_planner import is_configured, configuration
 from ui_components import task_summary, calendar_item, brand, planner_header, pet_identity, task_state
 from calendar_presentation import render_timeline
 from homepage import show_home
-from assistant_ui import render_assistant
+from assistant_ui import render_assistant, suspend_assistant
 
 st.set_page_config(page_title="PawPal AI Planner", page_icon=favicon(), layout="wide", initial_sidebar_state="auto")
 apply_theme()
@@ -339,9 +339,18 @@ def calendar_workspace(store, owner, owners):
 
 def assistant_navigate(route):
     if not route:
-        return
+        return False
     target = route.get("owner_id", st.session_state.get("active_owner_id"))
     current = st.session_state.get("active_owner_id")
+    changed = (target != current or route["page"] != st.session_state.get("page")
+               or st.session_state.get("editor_open") or st.session_state.get("pet_dialog_open"))
+    if route["page"] == "Calendar":
+        changed = changed or st.session_state.get("calendar_pet") != route.get("pet_id")
+        changed = changed or st.session_state.get("calendar_status") != "All" or st.session_state.get("calendar_view") != "Day"
+        if route.get("day"):
+            changed = changed or str(st.session_state.get("calendar_date")) != route["day"]
+    if not changed:
+        return False
     if target != current:
         snapshot_current_draft()
         remember_active_draft()
@@ -363,10 +372,23 @@ def assistant_navigate(route):
         if route.get("day"):
             from datetime import date
             select_date(date.fromisoformat(route["day"]))
+    return True
+
+
+@st.fragment
+def planner_assistant():
+    route = render_assistant()
+    refresh = st.session_state.pop("assistant_refresh", False)
+    changed = assistant_navigate(route) if route else False
+    if changed or refresh:
+        st.rerun()
 
 
 def main():
-    assistant_navigate(render_assistant())
+    if st.session_state.get("page", "Home") in ("User", "Pets", "Calendar"):
+        planner_assistant()
+    else:
+        suspend_assistant()
     try:
         root_store = PlannerStore()
         profiles = root_store.list_profiles()
