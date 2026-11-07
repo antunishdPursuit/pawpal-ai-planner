@@ -74,7 +74,10 @@ test('real renderer emits arrival only after running, and the page update restor
  const f=fixture(true);await f.pet.ready;f.nodes['.paw-orb'].onclick();
  const update=data=>f.host.pawpalAssistant.update({...f.args,data:{configured:true,receipts:[],...data}});
  update({navigation:{id:'trip',page:'Pets'}});assert.equal(f.events.filter(e=>e.kind==='navigation_done').length,0);
- f.advance(4000);assert.equal(f.events.filter(e=>e.kind==='navigation_done').length,1);assert.ok(Number(f.nodes.canvas.dataset.x)<0);
+ f.advance(4000);assert.equal(f.events.filter(e=>e.kind==='navigation_done').length,1);assert.equal(f.nodes.canvas.dataset.x,'188');
  update({navigation:{id:'trip',page:'Pets'}});assert.equal(f.events.filter(e=>e.kind==='navigation_done').length,1);
+ update({page:'Pets',navigation:{id:'trip',page:'Pets',arrived:true,entering:true}});assert.equal(f.nodes.canvas.dataset.x,'188');
+ f.advance(280);assert.ok(Number(f.nodes.canvas.dataset.x)>0&&Number(f.nodes.canvas.dataset.x)<188);
+ f.advance(400);assert.equal(f.nodes.canvas.dataset.x,'0');assert.equal(f.events.filter(e=>e.kind==='navigation_entered').length,1);
  update({page:'Pets',navigation:null});assert.equal(f.nodes.canvas.dataset.x,'0');f.cleanup();
 });

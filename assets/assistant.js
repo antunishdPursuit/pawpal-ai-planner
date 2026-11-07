@@ -51,7 +51,14 @@ export default function(args) {
  function emit(payload){const event={id:crypto.randomUUID(),...payload};outbox.push(event);current.setStateValue('outbox',outbox.slice());return event.id;}
  function update(next){const pendingCount=outbox.length;current=next;if(next.data.credential?.session_id!==credentialId){credentialId=next.data.credential?.session_id;credentialReceivedAt=performance.now();}root.dataset.updates=String(Number(root.dataset.updates)+1);for(const receipt of next.data.receipts||[]){if(seen.has(receipt.id))continue;seen.add(receipt.id);outbox=outbox.filter(e=>e.id!==receipt.id);if(receipt.message){message('assistant',receipt.message);voiceStatus=receipt.failed?receipt.message:'Ask about users, pets, or care plans.';if(!receipt.failed)greet();}if(receipt.call)audio.receipt(receipt);if(receipt.prepared||receipt.failed)preparing=false;busy=false;}const preview=el('.paw-proposal');preview.hidden=!next.data.proposal;preview.replaceChildren();if(next.data.proposal){const s=next.data.proposal.summary;const item=document.createElement('p');item.textContent=`${s.owner}  |  ${s.pet}\n${s.title}\n${s.date}  |  ${s.time} (${s.timezone})\n${s.repeat}${s.repeat==='CUSTOM'?' every '+s.interval_days+' days':''}\n${s.location||'No location'}\n${s.description||''}`;preview.append(item);for(const conflict of next.data.proposal.conflicts||[]){const warning=document.createElement('p');warning.textContent=conflict;preview.append(warning);}}
  audio.setPreview(next.data.proposal?.id);controls();if(outbox.length!==pendingCount)current.setStateValue('outbox',outbox.slice());
- const trip=next.data.navigation;root.dataset.navigation=trip?(trip.arrived?'acknowledged':'pending'):'none';if((trip?.id||null)!==navigationId){cancelNavigation?.();navigationId=trip?.id||null;if(trip){const id=trip.id;cancelNavigation=pet.navigate(()=>{root.dataset.navigation='arrived';if(!disposed&&navigationId===id)emit({kind:'navigation_done',navigation_id:id});});}}}
+ const trip=next.data.navigation,key=trip?trip.id+(trip.entering?':enter':':exit'):null;
+ root.dataset.navigation=trip?(trip.entering?'entering':trip.arrived?'acknowledged':'pending'):'none';
+ if(key!==navigationId){cancelNavigation?.();navigationId=key;if(trip){
+  cancelNavigation=pet.navigate(()=>{
+   root.dataset.navigation=trip.entering?'settled':'arrived';
+   if(!disposed&&navigationId===key)emit({kind:trip.entering?'navigation_entered':'navigation_done',navigation_id:trip.id});
+  },Boolean(trip.entering));
+ }}}
  function minimize(){audio.stop();panel.hidden=true;orb.setAttribute('aria-expanded','false');orb.focus();controls();idle();}
  orb.onclick=()=>{if(!panel.hidden){minimize();return;}clearTimeout(idleTimer);panel.hidden=false;orb.setAttribute('aria-expanded','true');greet();controls();text.focus();};el('.paw-minimize').onclick=minimize;
  form.onsubmit=e=>{e.preventDefault();const value=text.value.trim();if(!value||busy||audio.isActive()||preparing)return;busy=true;message('user',value);text.value='';emit({kind:'chat',text:value});controls();};

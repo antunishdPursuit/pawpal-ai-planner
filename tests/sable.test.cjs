@@ -75,6 +75,21 @@ test('reduced motion uses expressive stills with no roaming',async()=>{
 test('navigation runs before arrival and honors pause or reduced motion immediately',async()=>{
  const f=await fixture();let arrived=0;const states=new Set();const cancel=f.pet.navigate(()=>arrived++);
  for(let i=0;i<180;i++){f.advance(16);states.add(f.canvas.dataset.state);if(arrived)break;}
- assert.ok(states.has('stand'));assert.ok(states.has('run'));assert.equal(arrived,1);assert.ok(Number(f.canvas.dataset.x)<0);assert.ok(Number(f.canvas.dataset.x)>=-88);f.advance(2000);assert.equal(arrived,1);cancel();assert.equal(f.canvas.dataset.x,'0');f.pet.cleanup();
+ assert.ok(states.has('stand'));assert.ok(states.has('run'));assert.equal(arrived,1);assert.equal(f.canvas.dataset.x,'188');assert.equal(f.canvas.dataset.facing,'right');f.advance(2000);assert.equal(arrived,1);cancel();assert.equal(f.canvas.dataset.x,'0');f.pet.cleanup();
  const r=await fixture({reduced:true});let immediate=0;r.pet.navigate(()=>immediate++);assert.equal(immediate,1);r.pet.cleanup();
+});
+
+test('page entrance starts offscreen and runs left to the resting position',async()=>{
+ const f=await fixture();let arrived=0;const cancel=f.pet.navigate(()=>arrived++,true);
+ assert.equal(f.canvas.dataset.x,'188');assert.equal(f.canvas.dataset.facing,'left');
+ f.advance(280);assert.ok(Number(f.canvas.dataset.x)>0&&Number(f.canvas.dataset.x)<188);
+ f.advance(400);assert.equal(arrived,1);assert.equal(f.canvas.dataset.x,'0');cancel();assert.equal(f.canvas.dataset.x,'0');f.pet.cleanup();
+});
+
+test('entrance skips safely when paused and resize does not snap a traveling sprite home',async()=>{
+ const f=await fixture();f.pet.setPaused(true);let entered=0;
+ f.pet.navigate(()=>entered++,true);assert.equal(entered,1);assert.equal(f.canvas.dataset.x,'0');
+ f.pet.setPaused(false);f.pet.navigate(()=>entered++,true);f.advance(200);
+ const x=f.canvas.dataset.x;f.env.innerWidth=320;f.env.emit('resize');assert.equal(f.canvas.dataset.x,x);
+ f.advance(600);assert.equal(entered,2);assert.equal(f.canvas.dataset.x,'0');f.pet.cleanup();
 });

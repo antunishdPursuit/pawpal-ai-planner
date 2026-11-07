@@ -259,3 +259,16 @@ def test_manual_page_change_discards_pending_arrival(tmp_path,monkeypatch):
     nav=state['assistant_state']['navigation'];state['assistant_state']['arrived_route']=nav['route']
     state['page']='Calendar';assert drain() is None
     assert 'navigation' not in state['assistant_state'] and 'arrived_route' not in state['assistant_state']
+
+
+def test_arrival_enters_only_the_destination_and_ignores_stale_entrance(tmp_path,monkeypatch):
+    root,o,p,state,events,drain=harness(tmp_path,monkeypatch)
+    state['page']='User';drain();state['assistant_state']['route']={'page':'Pets'};drain()
+    nav=state['assistant_state']['navigation']
+    events.append({'id':'exit','kind':'navigation_done','navigation_id':nav['id']});drain()
+    state['assistant_state'].pop('arrived_route');state['page']='Pets';drain()
+    assert nav['entering'] is True
+    events.append({'id':'stale','kind':'navigation_entered','navigation_id':'wrong'});drain()
+    assert state['assistant_state']['navigation'] is nav
+    events.append({'id':'enter','kind':'navigation_entered','navigation_id':nav['id']});drain()
+    assert 'navigation' not in state['assistant_state']

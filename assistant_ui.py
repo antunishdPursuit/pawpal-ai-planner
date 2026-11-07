@@ -56,7 +56,10 @@ def render_assistant():
     page = st.session_state.get("page", "Home")
     navigation = state.get("navigation")
     if navigation and navigation["from_page"] != page:
-        state.pop("navigation", None)
+        if navigation.get("arrived") and navigation["route"]["page"] == page:
+            navigation["entering"] = True
+        else:
+            state.pop("navigation", None)
         state.pop("arrived_route", None)
     route = state.get("route")
     if route and route["page"] != page:
@@ -78,7 +81,7 @@ def render_assistant():
         "configured": is_configured(), "receipts": receipts,
         "page": st.session_state.get("page", "Home"),
         "history": state["history"],
-        "navigation": ({"id": state["navigation"]["id"], "page": state["navigation"]["route"]["page"], "arrived": state["navigation"].get("arrived", False)}
+        "navigation": ({"id": state["navigation"]["id"], "page": state["navigation"]["route"]["page"], "arrived": state["navigation"].get("arrived", False), "entering": state["navigation"].get("entering", False)}
                        if state.get("navigation") else None),
         "credential": st.session_state.get("assistant_credential"),
         "proposal": ({"id": pending["id"], "summary": pending["summary"], "conflicts": pending["conflicts"]} if pending else None),
@@ -128,6 +131,11 @@ def render_assistant():
                     and navigation["from_page"] == st.session_state.get("page", "Home")):
                 state["arrived_route"] = navigation["route"]
                 navigation["arrived"] = True
+        elif kind == "navigation_entered":
+            navigation = state.get("navigation")
+            if (navigation and navigation.get("entering") and event.get("navigation_id") == navigation["id"]
+                    and navigation["route"]["page"] == st.session_state.get("page", "Home")):
+                state.pop("navigation", None)
         elif kind == "chat":
             if state.get("live_session", {}).get("active"):
                 receipt["message"] = "Stop voice before sending a typed message."

@@ -34,7 +34,7 @@ export function createSable(canvas, button, assets, env=window) {
   if(name==='sleep'){if(desired!=='sleep')play('wake');return;}
   if(movement(name)){
    if(!boundary)return;
-   if(movement(desired)){facing=destination<x?'left':'right';play(desired);}
+   if(movement(desired)){facing=navigation?(navigation.entering?'left':'right'):destination<x?'left':'right';play(desired);}
    else if(name==='run')play('walk');
    else {facing='left';play('lie');}
    return;
@@ -62,7 +62,7 @@ export function createSable(canvas, button, assets, env=window) {
  }
  function finish() {
   if(assets.clips[name].loop){loops++;elapsed=0;reconcile(true);return;}
-  if(name==='stand'){play(movement(desired)?desired:'walk');reconcile(true);}
+  if(name==='stand'){if(navigation)facing=navigation.entering?'left':'right';play(movement(desired)?desired:'walk');reconcile(true);}
   else if(name==='lie'){play('awake');reconcile();}
   else if(name==='wake'){play('awake');reconcile();}
   else if(name==='settle'){play('sleep');reconcile();}
@@ -78,7 +78,10 @@ export function createSable(canvas, button, assets, env=window) {
  }
  function travel(dt) {
   if(navigation){
-   if(name==='run'&&!navigation.arrived){navigation.elapsed+=dt;x=navigation.origin-navigation.distance*Math.min(1,navigation.elapsed/560);if(navigation.elapsed>=560){navigation.arrived=true;navigation.done();}}
+   if(name==='run'&&!navigation.arrived){
+    const trip=navigation;trip.elapsed+=dt;x=trip.origin+(trip.target-trip.origin)*Math.min(1,trip.elapsed/560);
+    if(trip.elapsed>=560)arrive(trip);
+   }
    return;
   }
   if(!roaming||!movement(name)||desired!==name)return;
@@ -90,7 +93,7 @@ export function createSable(canvas, button, assets, env=window) {
  }
  function tick(now) {
   if(disposed)return;
-  if(navigation&&!navigation.arrived&&(paused||media.matches||document.hidden)){navigation.arrived=true;navigation.done();}
+  if(navigation&&!navigation.arrived&&(paused||media.matches||document.hidden))arrive(navigation);
   const stopped=paused||media.matches||document.hidden||((hovered||focused)&&roaming);
   if(loaded&&!stopped&&!navigation?.arrived){
    const dt=last===null?0:Math.min(100,now-last);elapsed+=dt;cueDwell=Math.max(0,cueDwell-dt);travel(dt);
@@ -115,17 +118,26 @@ export function createSable(canvas, button, assets, env=window) {
  button.addEventListener('pointerenter',enter);button.addEventListener('pointerleave',leave);
  button.addEventListener('focus',focus);button.addEventListener('blur',blur);
  const visibility=()=>{last=null;};document.addEventListener('visibilitychange',visibility);
- const resize=()=>{x=Math.max(-Math.max(0,Math.min(220,env.innerWidth-188)),Math.min(0,x));destination=Math.max(-Math.max(0,Math.min(220,env.innerWidth-188)),destination);draw();};
+ const resize=()=>{if(!navigation){x=Math.max(-Math.max(0,Math.min(220,env.innerWidth-188)),Math.min(0,x));destination=Math.max(-Math.max(0,Math.min(220,env.innerWidth-188)),destination);}draw();};
  env.addEventListener('resize',resize);
  play('sleep');
  const ready=Promise.all(Object.entries(assets.images).map(([key,url])=>new Promise((resolve,reject)=>{const image=new env.Image();image.onload=()=>{images[key]=image;resolve();};image.onerror=()=>reject(new Error('Companion image unavailable'));image.src=url;}))).then(()=>{
   if(disposed)return;loaded=true;button.dataset.art='ready';draw();frameRequest=env.requestAnimationFrame(tick);
  }).catch(()=>{if(!disposed){button.dataset.art='unavailable';canvas.hidden=true;}});
- function navigate(done){
-  const trip={done,elapsed:0,arrived:false,restore:desired,origin:x,distance:Math.min(88,Math.max(0,Math.min(220,env.innerWidth-188)+x))};navigation=trip;roaming=false;destination=-220;desired='run';
+ function arrive(trip){
+  trip.arrived=true;
+  if(trip.entering){navigation=null;x=0;desired=trip.restore;reconcile();draw();}
+  trip.done();
+ }
+ function navigate(done,entering=false){
+  // The button's normal position is 16/24px from the right viewport edge.
+  // Move its whole 156px drawing off that edge before switching pages.
+  const edge=188;
+  const trip={done,entering,elapsed:0,arrived:false,restore:navigation?.restore||desired,origin:entering?edge:x,target:entering?0:edge};navigation=trip;x=trip.origin;roaming=false;destination=trip.target;desired='run';
+  if(entering){facing='left';play('run');}
   const cancel=()=>{if(navigation===trip){navigation=null;x=0;desired=trip.restore;reconcile();draw();}};
-  if(paused||media.matches||document.hidden||!loaded){trip.arrived=true;done();}
-  else {facing='left';reconcile();draw();}
+  if(paused||media.matches||document.hidden||!loaded)arrive(trip);
+  else {facing=entering?'left':'right';reconcile();draw();}
   return cancel;
  }
  return {ready,setIntent,wander,navigate,setPaused(value){paused=Boolean(value);last=null;draw();},isPaused:()=>paused,
