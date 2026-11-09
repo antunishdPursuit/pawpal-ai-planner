@@ -113,7 +113,7 @@ class AssistantActions:
         except (sqlite3.Error, OSError):
             if name == "save_task" and self.state.get("proposal"):
                 self.state["proposal"]["turn"] = turn
-            return {"ok": False, "error": "Local storage is unavailable. Nothing new was confirmed; try again."}
+            return {"ok": False, "retryable": True, "error": "Local storage is unavailable. Nothing new was saved; try again."}
 
     def _execute(self, name, args, utterance, turn):
         if name == "get_context":

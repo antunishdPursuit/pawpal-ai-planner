@@ -4,8 +4,9 @@ from hashlib import sha256
 from io import BytesIO
 from uuid import uuid4
 import wave
-from gemini_planner import PlannerError
+from gemini_planner import PlannerError, logger
 from voice_completion import confirmed
+from confirmation_intent import classify_confirmation
 from voice_planner import transcribe
 
 
@@ -28,8 +29,11 @@ def stage_save(event, actions, session):
             or session.get("audio_turn") != local_turn or not session.get("audio_closed")):
         return failure("Wait for a complete spoken confirmation before saving.")
     turn = session["base_turn"] + local_turn
-    if (not proposal or event.get("preview_id") != proposal["id"]
-            or call.get("args") != {"proposal_id": proposal["id"]} or turn != proposal["turn"] + 1):
+    automatic = event.get("app_confirmation") is True
+    current_preview = (proposal and event.get("preview_id") == proposal["id"]
+                       and call.get("args") == {"proposal_id": proposal["id"]})
+    valid_turn = proposal and (turn > proposal["turn"] if automatic else turn == proposal["turn"] + 1)
+    if not current_preview or not valid_turn:
         if proposal and event.get("preview_id") == proposal["id"] and turn > proposal["turn"]:
             return require_new_preview(actions, "This confirmation arrived after the preview's confirmation turn. Nothing was saved.")
         return failure("Prepare a current preview, then confirm it on the next spoken turn.")
@@ -59,12 +63,30 @@ def stage_save(event, actions, session):
             transcripts[key] = None
     text = transcripts[key]
     if text is None:
-        return require_new_preview(actions, "Could not verify the spoken confirmation. Nothing was saved.")
-    if not confirmed(text, bool(proposal["conflicts"])):
+        return {"result": {"ok": False, "decision": "unclear", "error": "I didn't catch your reply. The task preview is unchanged. Please repeat your reply."}}
+    if automatic:
+        try:
+            intent = classify_confirmation(text, proposal["summary"], proposal["conflicts"])
+        except PlannerError:
+            logger.warning("planner_event=confirmation decision=unclear reason=provider_failure")
+            return {"result": {"ok": False, "decision": "unclear", "transcript": text,
+                               "error": "I couldn't interpret your reply. Nothing was saved; the preview is unchanged."}}
+        logger.info("planner_event=confirmation decision=%s", intent.decision)
+        if intent.decision in {"change", "cancel"}:
+            state.pop("proposal", None)
+            return {"result": {"ok": True, "decision": intent.decision, "transcript": text}}
+        if intent.decision != "confirm" or (proposal["conflicts"] and not intent.accepts_conflict):
+            return {"result": {"ok": False, "decision": "unclear", "transcript": text,
+                               "error": "Do you accept the displayed time conflict?" if proposal["conflicts"] else "Do you want me to save the displayed task, or change it?"}}
+        # Only this server-side interpretation grants approval. Never trust a
+        # client-supplied transcript or decision at the commit boundary.
+        text = "save anyway" if proposal["conflicts"] else "yes"
+    elif not confirmed(text, bool(proposal["conflicts"])):
         return require_new_preview(actions, "The spoken request did not confirm these details. Nothing was saved. If the user cancelled, acknowledge cancellation instead of asking again.")
     verification = {"id": str(uuid4()), "session_id": session["id"], "audio_turn": local_turn,
                     "proposal_id": proposal["id"], "turn": turn, "utterance": text,
-                    "args": {"proposal_id": proposal["id"]}}
+                    "args": {"proposal_id": proposal["id"]}, "automatic": automatic,
+                    "transcript": transcripts[key]}
     staged[call["id"]] = verification
     return {"verification_id": verification["id"]}
 
@@ -79,4 +101,17 @@ def commit_save(event, actions, session):
             or session.get("audio_turn") != staged["audio_turn"] or not session.get("audio_closed")
             or not proposal or proposal["id"] != staged["proposal_id"]):
         return {"ok": False, "error": "The voice request or preview changed before saving. Prepare a new preview."}
-    return actions.execute("save_task", staged["args"], staged["utterance"], staged["turn"])
+    # Retry a transient storage failure once with the same bound approval and
+    # idempotency key. The calendar is read back before reporting success.
+    for _ in range(2):
+        proposal = actions.state.get("proposal")
+        if not proposal or proposal["id"] != staged["proposal_id"]:
+            return {"ok": False, "error": "The preview changed. Nothing new was saved."}
+        turn = proposal["turn"] + 1 if staged.get("automatic") else staged["turn"]
+        result = actions.execute("save_task", staged["args"], staged["utterance"], turn)
+        if not staged.get("automatic") or not result.get("retryable"):
+            break
+        logger.warning("planner_event=confirmation_save reason=storage_retry")
+    if staged.get("automatic"):
+        result.update(decision="confirm", transcript=staged["transcript"])
+    return result

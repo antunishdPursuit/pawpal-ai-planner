@@ -215,7 +215,8 @@ test('production async gate rejects noise, preserves preview tags, and mute disc
  f.live.setMuted(false);f.live.setPreview('visible-before-speech');await feed(new Float32Array(6400).fill(.1));f.live.setPreview('later-preview');await feed(new Float32Array(20000));
  await s.onmessage({data:JSON.stringify({toolCall:{functionCalls:[{id:'async-call',name:'find_pets',args:{}}]}})});
  assert.equal(f.events.find(v=>v[0]==='tool')[1].preview_id,'visible-before-speech');
- assert.equal(f.events.filter(v=>v[0]==='turn'&&v[1].closed).length,1);assert.ok(s.sent.some(v=>v.realtimeInput?.audio));
+ assert.equal(f.events.filter(v=>v[0]==='turn'&&v[1].closed).length,1);assert.equal(s.sent.some(v=>v.realtimeInput?.audio),false);
+ assert.equal(f.events.find(v=>v[0]==='tool')[1].app_confirmation,true);
  f.live.stop();assert.equal(destroyed,true);
 });
 
@@ -236,12 +237,12 @@ test('post-playback reply prefix is sent only after fresh speech and preserves t
  assert.equal(s.sent.filter(v=>v.realtimeInput).length,0);
  f.live.setPreview('changed-during-guard');f.contexts[0].currentTime=.3;
  f.worklets.at(-1).port.onmessage({data:new Float32Array(3200).fill(.11)});
- assert.equal(s.sent.filter(v=>v.realtimeInput?.activityStart).length,1);
- const audio=s.sent.filter(v=>v.realtimeInput?.audio).map(v=>Buffer.from(v.realtimeInput.audio.data,'base64'));
- assert.equal(audio[0].readInt16LE(0),Math.round(.23*32767));assert.ok(audio.reduce((n,b)=>n+b.length/2,0)>=4800);
+ assert.equal(s.sent.filter(v=>v.realtimeInput).length,0);
  f.worklets.at(-1).port.onmessage({data:new Float32Array(16000)});
  await s.onmessage({data:JSON.stringify({toolCall:{functionCalls:[{id:'buffered-call',name:'find_pets',args:{}}]}})});
- assert.equal(f.events.find(v=>v[0]==='tool')[1].preview_id,'at-first-word');f.live.stop();
+ const event=f.events.find(v=>v[0]==='tool')[1],audio=Buffer.from(event.audio,'base64');
+ assert.equal(event.preview_id,'at-first-word');assert.equal(audio.readInt16LE(44),Math.round(.23*32767));
+ assert.ok(audio.readUInt32LE(40)/2>=4800);assert.equal(s.sent.some(v=>v.realtimeInput?.audio),false);f.live.stop();
 });
 
 test('guard-buffered sounds alone never open a turn, and mute erases the prefix',async()=>{
@@ -295,4 +296,48 @@ test('reply after playback but before server completion is buffered locally, nev
  await s.onmessage({data:JSON.stringify({serverContent:{turnComplete:true}})});speak(f);
  const audio=s.sent.find(v=>v.realtimeInput?.audio).realtimeInput.audio;
  assert.equal(Buffer.from(audio.data,'base64').readInt16LE(0),Math.round(.23*32767));f.live.stop();
+});
+
+async function awaitingPreview(){
+ const f=fixture();await f.live.start(credential);const s=f.sockets[0];s.onopen();
+ await s.onmessage({data:JSON.stringify({setupComplete:{}})});
+ await s.onmessage({data:JSON.stringify({serverContent:{turnComplete:true}})});
+ f.live.setPreview('current-preview');return {f,s};
+}
+test('closed preview reply is interpreted by the app without a Gemini save tool call',async()=>{
+ const {f,s}=await awaitingPreview();
+ speak(f);
+ const event=f.events.find(e=>e[0]==='tool')[1];
+ assert.equal(event.app_confirmation,true);assert.equal(event.preview_id,'current-preview');
+ assert.ok(Buffer.from(event.audio,'base64').length>44);
+ assert.equal(s.sent.some(e=>e.realtimeInput),false);
+ f.live.receipt({session_id:credential.session_id,call:event.call,verification_id:'verified'});
+ assert.equal(f.events.filter(e=>e[0]==='commit').length,1);
+ f.live.receipt({session_id:credential.session_id,call:event.call,result:{ok:true,saved:true,decision:'confirm',transcript:'Yes, you should.'}});
+ assert.equal(s.sent.filter(e=>e.clientContent).length,2); // Greeting plus app result.
+ assert.match(s.sent.at(-1).clientContent.turns[0].parts[0].text,/"saved":true/);
+ const count=s.sent.length;
+ f.live.receipt({session_id:credential.session_id,call:event.call,result:{ok:true,saved:true}});
+ assert.equal(s.sent.length,count);assert.equal(f.live.isActive(),true);f.live.stop();
+});
+for(const interruption of ['stop','mute','new-turn','new-preview'])test(`automatic approval cannot commit after ${interruption}`,async()=>{
+ const {f,s}=await awaitingPreview();speak(f);
+ const event=f.events.find(e=>e[0]==='tool')[1];
+ if(interruption==='stop')f.live.stop();
+ if(interruption==='mute')f.live.setMuted(true);
+ if(interruption==='new-turn')speak(f);
+ if(interruption==='new-preview')f.live.setPreview('replacement');
+ f.live.receipt({session_id:credential.session_id,call:event.call,verification_id:'late'});
+ assert.equal(f.events.filter(e=>e[0]==='commit').length,0);
+ assert.equal(s.sent.some(e=>e.toolResponse),false);f.live.stop();
+});
+test('a changed reply is handed back to Live and can generate a replacement preview',async()=>{
+ const {f,s}=await awaitingPreview();speak(f);
+ const event=f.events.find(e=>e[0]==='tool')[1];
+ f.live.receipt({session_id:credential.session_id,call:event.call,result:{ok:true,decision:'change',transcript:'Yes, but at nine instead.'}});
+ f.live.setPreview(null);
+ await s.onmessage({data:JSON.stringify({toolCall:{functionCalls:[{id:'changed',name:'preview_task',args:{}}]}})});
+ const changed=f.events.filter(e=>e[0]==='tool').at(-1)[1];
+ assert.equal(changed.call.id,'changed');assert.equal(changed.app_confirmation,false);
+ assert.equal(f.events.filter(e=>e[0]==='commit').length,0);f.live.stop();
 });

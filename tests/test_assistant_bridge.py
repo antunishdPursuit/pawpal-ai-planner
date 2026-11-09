@@ -272,3 +272,32 @@ def test_arrival_enters_only_the_destination_and_ignores_stale_entrance(tmp_path
     assert state['assistant_state']['navigation'] is nav
     events.append({'id':'enter','kind':'navigation_entered','navigation_id':nav['id']});drain()
     assert 'navigation' not in state['assistant_state']
+
+
+def test_app_confirmation_saves_without_conversational_save_call(tmp_path, monkeypatch):
+    from confirmation_intent import ConfirmationIntent
+    root, owner, pet, state, events, drain = harness(tmp_path, monkeypatch)
+    monkeypatch.setattr(live_confirmation, 'transcribe', lambda *args: 'Yes, you should.')
+    monkeypatch.setattr(live_confirmation, 'classify_confirmation', lambda *args:
+        ConfirmationIntent(decision='confirm', accepts_conflict=False))
+    events.append({'id': 'prepare', 'kind': 'prepare_voice'}); drain()
+    actions = AssistantActions(root.path, state['assistant_state'])
+    preview = actions.execute('preview_task', dict(owner_id=owner.owner_id, pet_id=pet.pet_id,
+        title='Walk', due_date='2026-12-03', time_of_day='10:00'), turn=1)
+    call = {'id': 'app-confirm-2', 'name': 'save_task', 'args': {'proposal_id': preview['proposal_id']}}
+    events.extend([
+        {'id': 'closed', 'kind': 'voice_turn', 'session_id': 'session', 'turn': 2, 'closed': True},
+        {'id': 'reply', 'kind': 'live_tool', 'session_id': 'session', 'turn': 2, 'audio_turn': 2,
+         'preview_id': preview['proposal_id'], 'audio': audio(), 'app_confirmation': True, 'call': call}])
+    drain()
+    verified = next(r for r in state['assistant_receipts'] if r['id'] == 'reply')
+    events.append({'id': 'commit', 'kind': 'live_commit', 'session_id': 'session', 'audio_turn': 2,
+                   'verification_id': verified['verification_id'], 'call': call})
+    drain()
+    receipt = next(r for r in state['assistant_receipts'] if r['id'] == 'commit')
+    assert receipt['result']['saved']
+    assert receipt['result']['transcript'] == 'Yes, you should.'
+    assert state['assistant_state']['navigation']['route']['page'] == 'Calendar'
+    assert len(PlannerStore(root.path, owner.owner_id).load().get_all_tasks()) == 1
+    drain()
+    assert len(PlannerStore(root.path, owner.owner_id).load().get_all_tasks()) == 1

@@ -34,7 +34,7 @@ For optional fictional presentation data, run `python seed_demo.py`. It adds thr
 
 ## How it works
 
-Gemini turns a request into a structured proposal. Local code validates the fields and registered pet, then presents an editable preview. A person confirms through the task dialog or the planner assistant; the storage layer validates again, saves once, and reads the task back. Manual entry uses the same validation and confirmation flow. Live saves verify the complete spoken confirmation with a separate short transcription request. Delayed Live transcripts cannot authorize a save; Stop, a newer request, or a changed preview during verification prevents committing it. Each spoken request is limited to 30 seconds.
+Gemini turns a request into a structured proposal. Local code validates the fields and registered pet, then presents an editable preview. A person confirms through the task dialog or the planner assistant; the storage layer validates again, saves once, and reads the task back. Manual entry uses the same validation and confirmation flow. In the planner assistant, while a preview is displayed, the app holds the next spoken reply for transcription and a structured semantic check (confirm, change, cancel, or unclear). Clear approval saves the unchanged preview directly through the app, without waiting for a Live save-tool call. Unclear replies retain the preview; changes require a new preview, and cancellations clear it. A transient storage failure retries once with the same approval and task ID. Delayed Live transcripts cannot authorize a save; Stop, a newer request, or a changed preview during verification prevents committing it. Each spoken request is limited to 30 seconds.
 
 [Architecture diagram](diagrams/architecture.mmd) · [Data model (ERD)](diagrams/erd.mmd) · [Responsible-AI model card](model_card.md)
 
@@ -207,7 +207,7 @@ python -B -m pytest -p no:cacheprovider -q
 node --test tests/homepage.test.cjs tests/voice.test.cjs
 ```
 
-Six domain tests passed in the recorded checks. The three live scenarios above and a browser preview, confirmation, and database readback were also checked with temporary data. They are a small evaluation, not an accuracy or safety benchmark. The [model card](model_card.md) describes the evaluation, limitations, and AI collaboration in more detail.
+On November 9, 2026, 131 Python tests and 83 JavaScript tests passed. A live semantic check classified 19 fictional replies as expected. Generated speech checks covered approval (one saved task), a change, and cancellation (no saves); a real Live connection acknowledged the saved task without another confirmation. These checks used disposable databases and generated speech, not the user's microphone. Six domain tests passed in the earlier recorded checks. The three live scenarios above and a browser preview, confirmation, and database readback were also checked with temporary data. They are a small evaluation, not an accuracy or safety benchmark. The [model card](model_card.md) describes the evaluation, limitations, and AI collaboration in more detail.
 
 Local profiles are not authentication: anyone using the app on the device can select a profile. Task records are stored in local SQLite. AI requests include the current user's bounded pet and task context; live voice also sends the current profile name/ID and audio. Other profiles are excluded. The app does not provide veterinary advice, cloud sync, or reminders. Review AI-generated details before saving.
 
