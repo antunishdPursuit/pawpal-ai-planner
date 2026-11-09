@@ -95,3 +95,44 @@ def test_yes_spoken_before_preview_is_displayed_cannot_authorize_it(tmp_path,mon
     monkeypatch.setattr(confirmation,"transcribe",lambda *args:(_ for _ in ()).throw(AssertionError("No ASR before preview")))
     assert not confirmation.stage_save(event,actions,session)["result"]["ok"]
     assert not PlannerStore(root.path,owner.owner_id).load().get_all_tasks()
+
+
+@pytest.mark.parametrize('reply', ["That sounds great to me. Let's do it.", "Yes, I confirm it.", "Yes, you should save it."])
+def test_natural_confirmation_saves_once(tmp_path, monkeypatch, reply):
+    root, owner, actions, event, session = fixture(tmp_path)
+    monkeypatch.setattr(confirmation, 'transcribe', lambda *args: reply)
+    verified = confirmation.stage_save(event, actions, session)
+    ack = {**event, **verified}
+    assert confirmation.commit_save(ack, actions, session)['saved']
+    assert len(PlannerStore(root.path, owner.owner_id).load().get_all_tasks()) == 1
+    assert not confirmation.commit_save(ack, actions, session)['ok']
+    assert len(PlannerStore(root.path, owner.owner_id).load().get_all_tasks()) == 1
+
+
+def test_rejected_confirmation_recovers_with_new_preview(tmp_path, monkeypatch):
+    root, owner, actions, event, session = fixture(tmp_path)
+    monkeypatch.setattr(confirmation, 'transcribe', lambda *args: 'Maybe')
+    failed = confirmation.stage_save(event, actions, session)['result']
+    assert failed['requires_preview']
+    assert 'proposal' not in actions.state
+    assert not PlannerStore(root.path, owner.owner_id).load().get_all_tasks()
+    pet = PlannerStore(root.path, owner.owner_id).load().pets[0]
+    fresh = actions.execute('preview_task', dict(owner_id=owner.owner_id, pet_id=pet.pet_id,
+        title='Walk', due_date='2026-12-03', time_of_day='10:00'), turn=2)
+    event.update(turn=3, audio_turn=3, preview_id=fresh['proposal_id'],
+        call={'id': 'retry', 'name': 'save_task', 'args': {'proposal_id': fresh['proposal_id']}})
+    session.update(audio_turn=3)
+    monkeypatch.setattr(confirmation, 'transcribe', lambda *args: 'Yes, you should save it.')
+    verified = confirmation.stage_save(event, actions, session)
+    assert confirmation.commit_save({**event, **verified}, actions, session)['saved']
+    assert len(PlannerStore(root.path, owner.owner_id).load().get_all_tasks()) == 1
+
+
+def test_expired_turn_requires_new_preview_instead_of_repeated_save(tmp_path):
+    root, owner, actions, event, session = fixture(tmp_path)
+    event.update(turn=3, audio_turn=3)
+    session.update(audio_turn=3)
+    result = confirmation.stage_save(event, actions, session)['result']
+    assert result['requires_preview']
+    assert 'proposal' not in actions.state
+    assert not PlannerStore(root.path, owner.owner_id).load().get_all_tasks()

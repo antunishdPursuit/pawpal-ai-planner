@@ -8,17 +8,38 @@ from gemini_planner import decode_proposal, PlannerError
 from planner_clock import using_timezone
 
 
-def confirmed(text, conflict=False):
-    if not isinstance(text, str):
-        return False
+# Match complete affirmative clauses, never a positive substring inside a change
+# request, negation, question, or conditional instruction.
+AFFIRMATIVE_CLAUSE = re.compile(
+    r"(?:yes|yeah|yep|okay|ok|sure|absolutely|definitely|correct|confirmed|confirm|"
+    r"(?:yes )?(?:i )?confirm(?: it| that| the details| the task)?|"
+    r"(?:that |it )?(?:sounds|looks) (?:good|great|right|correct)(?: to me)?|"
+    r"(?:that|it) works(?: for me)?|(?:that is|thats) (?:right|correct|fine)|"
+    r"go ahead|(?:lets |let us |you should |you can |please )?"
+    r"(?:save|add|do) (?:it|that|the task|the event)|"
+    r"keep this time anyway|(?:please )?save anyway)"
+)
+
+
+def _confirmation_text(text):
     text = re.sub(r"[^a-z0-9 ]", " ", text.lower().replace("'", "").replace("’", ""))
     text = " ".join(text.split())
     text = re.sub(r"^(?:(?:uh|um|erm|well) )+", "", text)
-    if text.endswith(" please"):
-        text = text[:-7]
+    return text[:-7] if text.endswith(" please") else text
+
+
+def confirmed(text, conflict=False):
+    if not isinstance(text, str) or "?" in text:
+        return False
+    spoken = text
+    text = _confirmation_text(text)
     if conflict:
         return text in {"save anyway", "yes save anyway", "yes please save anyway", "keep this time anyway"}
-    return text in {"yes", "yeah", "yep", "okay", "ok", "sure", "yeah go ahead", "yep thats right", "correct", "confirmed", "confirm", "go ahead",
+    # Every clause must affirm the unchanged preview. Unknown text fails closed.
+    clause_text = _confirmation_text(re.sub(r"[.!;,]+", " and ", spoken))
+    clauses = re.split(r"\b(?:and|yes|yeah|yep|okay|ok|sure|please|thank you|thanks)\b", clause_text)
+    clauses = [clause.strip() for clause in clauses if clause.strip()]
+    return (bool(clauses) and all(AFFIRMATIVE_CLAUSE.fullmatch(c) for c in clauses)) or text in {"yes", "yeah", "yep", "okay", "ok", "sure", "yeah go ahead", "yep thats right", "correct", "confirmed", "confirm", "go ahead",
                     "yes please", "yes thats right", "thats right", "yes correct", "yeah thats correct", "yes thats correct",
                     "yes that is correct", "thats correct", "do it", "yes do it", "sounds good", "yes sounds good",
                     "that works", "looks good", "yes thats fine", "thats fine", "please save that", "yes save that",

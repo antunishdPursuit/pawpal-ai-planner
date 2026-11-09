@@ -13,6 +13,12 @@ def failure(message):
     return {"result": {"ok": False, "error": message}}
 
 
+def require_new_preview(actions, message):
+    actions.state.pop("proposal", None)
+    return {"result": {"ok": False, "requires_preview": True,
+                       "error": message + " Call preview_task with the user's current details, read the preview, then wait for a new spoken confirmation. Do not call save_task again for the old preview."}}
+
+
 def stage_save(event, actions, session):
     state = actions.state
     call = event["call"]
@@ -24,6 +30,8 @@ def stage_save(event, actions, session):
     turn = session["base_turn"] + local_turn
     if (not proposal or event.get("preview_id") != proposal["id"]
             or call.get("args") != {"proposal_id": proposal["id"]} or turn != proposal["turn"] + 1):
+        if proposal and event.get("preview_id") == proposal["id"] and turn > proposal["turn"]:
+            return require_new_preview(actions, "This confirmation arrived after the preview's confirmation turn. Nothing was saved.")
         return failure("Prepare a current preview, then confirm it on the next spoken turn.")
     staged = state.setdefault("live_verifications", {})
     previous = staged.get(call["id"])
@@ -51,9 +59,9 @@ def stage_save(event, actions, session):
             transcripts[key] = None
     text = transcripts[key]
     if text is None:
-        return failure("Could not verify the spoken confirmation. Nothing was saved. Prepare a fresh preview and try again.")
+        return require_new_preview(actions, "Could not verify the spoken confirmation. Nothing was saved.")
     if not confirmed(text, bool(proposal["conflicts"])):
-        return failure("The spoken request did not confirm these details. Nothing was saved; prepare a new preview for changes.")
+        return require_new_preview(actions, "The spoken request did not confirm these details. Nothing was saved. If the user cancelled, acknowledge cancellation instead of asking again.")
     verification = {"id": str(uuid4()), "session_id": session["id"], "audio_turn": local_turn,
                     "proposal_id": proposal["id"], "turn": turn, "utterance": text,
                     "args": {"proposal_id": proposal["id"]}}
