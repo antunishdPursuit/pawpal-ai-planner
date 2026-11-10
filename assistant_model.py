@@ -37,6 +37,9 @@ proposal after the user explicitly confirms its displayed summary. Tool failures
 are failures; claim success only from an ok saved receipt. Continue after saving.
 Return either a tool action or a short reply. Omit internal IDs from replies.
 The application handles approval of previews. Never invent a save action.
+When previous_proposal is present, correction_context must be retain only if
+the user is continuing that correction (including an answer such as AM or PM).
+Use discard for cancellation, an unrelated question, or a different task.
 """
 
 
@@ -44,7 +47,7 @@ def respond(request, actions, history, turn):
     key, model = configuration()
     if not key:
         raise PlannerError("Gemini is not configured. You can still use the planner and Manual task entry.")
-    previous = None
+    previous = actions.state.get('correction_context')
     allowed_tools = CHAT_TOOLS
     pending = actions.state.get('proposal')
     if pending and turn > pending['turn']:
@@ -70,6 +73,7 @@ def respond(request, actions, history, turn):
             return result.get('error', 'Nothing was saved. The preview is unchanged.')
         if kind == 'cancel':
             actions.state.pop('proposal', None)
+            actions.state.pop('correction_context', None)
             return 'Cancelled. Nothing was saved.'
         if kind == 'unclear':
             return decision['error']
@@ -79,12 +83,16 @@ def respond(request, actions, history, turn):
             allowed_tools = [tool for tool in CHAT_TOOLS if tool['name'] != 'preview_task']
         if kind == 'change':
             previous = decision['preview_summary']
+            actions.state['correction_context'] = previous
             actions.state.pop('proposal', None)
     events = []
     schema = {"type": "object", "properties": {
         "action": {"type": "string", "enum": ["reply"] + [t["name"] for t in allowed_tools]},
         "message": {"type": "string"}, "arguments_json": {"type": "string"}},
         "required": ["action", "message", "arguments_json"]}
+    if previous:
+        schema['properties']['correction_context'] = {'type': 'string', 'enum': ['retain', 'discard']}
+        schema['required'].append('correction_context')
     try:
         with genai.Client(api_key=key, http_options=types.HttpOptions(timeout=25000,
                 retry_options=types.HttpRetryOptions(attempts=1))) as client:
@@ -99,6 +107,13 @@ def respond(request, actions, history, turn):
                         response_mime_type="application/json", response_json_schema=schema,
                         temperature=0.1, max_output_tokens=1500))
                 choice = json.loads(response.text)
+                if previous:
+                    disposition = choice['correction_context']
+                    if disposition not in ('retain', 'discard'):
+                        raise PlannerError('Could not resolve the correction. Nothing was saved.')
+                    if disposition == 'discard':
+                        actions.state.pop('correction_context', None)
+                        previous = None
                 if choice['action'] not in ['reply'] + [t['name'] for t in allowed_tools]:
                     raise PlannerError('The assistant requested an unsupported action. Nothing was saved.')
                 if choice["action"] == "reply":
@@ -108,6 +123,7 @@ def respond(request, actions, history, turn):
                 if result.get("needs_time"):
                     return result["error"]
                 if result.get("confirmation_required"):
+                    actions.state.pop('correction_context', None)
                     summary = result["summary"]
                     if summary["time"] == "Anytime":
                         at = "Anytime, as requested"

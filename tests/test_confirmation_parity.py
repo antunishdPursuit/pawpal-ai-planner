@@ -65,7 +65,10 @@ def model_choice(monkeypatch, choice, check=lambda payload: None):
         def __exit__(self, *args): pass
         def generate_content(self, **kwargs):
             check(json.loads(kwargs['contents']))
-            return SimpleNamespace(text=json.dumps(choice))
+            result = dict(choice)
+            if 'correction_context' in kwargs['config'].response_json_schema['properties']:
+                result.setdefault('correction_context', 'retain')
+            return SimpleNamespace(text=json.dumps(result))
     monkeypatch.setattr(typed.genai, 'Client', Client)
 
 
@@ -79,6 +82,54 @@ def test_change_uses_previous_details_but_requires_new_preview(tmp_path, monkeyp
     model_choice(monkeypatch, dict(action='preview_task', arguments_json=json.dumps(args)), check)
     assert 'Shall I save' in typed.respond('Yes, but at 9 AM instead', actions, [], 2)
     assert actions.state['proposal']['id'] != previous and count(root, owner) == 0
+
+
+def test_correction_context_survives_followup_and_provider_failure(tmp_path, monkeypatch):
+    root, owner, actions, _, _ = prepare(tmp_path, monkeypatch, 'change')
+    draft_pet = actions.state['proposal']['draft'].pet_id
+    original = dict(actions.state['proposal']['summary'], location='West gate', description='Bring water')
+    actions.state['proposal']['summary'] = original
+    model_choice(monkeypatch, dict(action='reply', message='AM or PM?', arguments_json='{}'))
+    assert typed.respond('Make it 9 instead', actions, [], 2) == 'AM or PM?'
+    assert 'proposal' not in actions.state and count(root, owner) == 0
+    def unavailable(payload):
+        assert payload['previous_proposal'] == original
+        raise RuntimeError('provider unavailable')
+    model_choice(monkeypatch, {}, unavailable)
+    with pytest.raises(PlannerError):
+        typed.respond('PM', actions, [], 3)
+    assert actions.state['correction_context'] == original
+    args = dict(owner_id=owner.owner_id, pet_id=draft_pet, title='Walk', due_date='2026-12-03', time_of_day='21:00', location='West gate', description='Bring water')
+    def retained(payload):
+        assert payload['previous_proposal'] == original and payload['latest_proposal'] is None
+    model_choice(monkeypatch, dict(action='preview_task', arguments_json=json.dumps(args)), retained)
+    assert 'Shall I save' in typed.respond('PM', actions, [], 4)
+    assert 'correction_context' not in actions.state and count(root, owner) == 0
+    assert actions.state['proposal']['summary']['location'] == 'West gate'
+
+
+def test_repeat_details_includes_optional_fields_and_conflict_warning(tmp_path, monkeypatch):
+    root, owner, actions, _, _ = prepare(tmp_path, monkeypatch, 'question', 'details')
+    actions.state['proposal']['summary'].update(location='West gate', description='Bring water', repeat='CUSTOM', interval_days=3)
+    actions.state['proposal']['conflicts'] = ['Existing walk at 10 AM']
+    reply = typed.respond('Repeat all the details', actions, [], 2)
+    assert all(text in reply for text in ['West gate', 'Bring water', 'Every 3 days', 'Existing walk at 10 AM', 'Explicit acceptance'])
+    assert 'proposal' in actions.state and count(root, owner) == 0
+
+
+@pytest.mark.parametrize('reply', ['Cancel that', 'How many pets are there?', 'Create a different task'])
+def test_abandoned_correction_is_not_supplied_to_later_requests(tmp_path, monkeypatch, reply):
+    root, owner, actions, _, _ = prepare(tmp_path, monkeypatch, 'change')
+    model_choice(monkeypatch, dict(action='reply', message='AM or PM?', arguments_json='{}'))
+    typed.respond('Change it to 9', actions, [], 2)
+    model_choice(monkeypatch, dict(action='reply', message='Okay', arguments_json='{}', correction_context='discard'))
+    typed.respond(reply, actions, [], 3)
+    assert 'correction_context' not in actions.state and 'proposal' not in actions.state
+    def clean(payload):
+        assert payload['previous_proposal'] is None
+    model_choice(monkeypatch, dict(action='reply', message='Ready', arguments_json='{}'), clean)
+    typed.respond('What next?', actions, [], 4)
+    assert count(root, owner) == 0
 
 
 @pytest.mark.parametrize('action', ['save_task', 'preview_task'])

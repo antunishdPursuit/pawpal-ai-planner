@@ -69,6 +69,13 @@ def interpret_confirmation(text, proposal, classifier=classify_confirmation):
         if field == 'details':
             answer = (f"{summary['title']} for {summary['pet']} ({summary['owner']}) "
                       f"on {summary['date']} at {values['time']}; repeat: {values['repeat']}.")
+            if summary['repeat'] == 'CUSTOM':
+                answer += f" Every {summary['interval_days']} days."
+            for name in ('location', 'description'):
+                if summary.get(name):
+                    answer += f" {name.capitalize()}: {summary[name]}."
+            if proposal['conflicts']:
+                answer += ' Scheduling conflicts: ' + json.dumps(proposal['conflicts'], ensure_ascii=False) + '. Explicit acceptance of the overlap is required.'
         elif field != 'other':
             answer = f"{field.capitalize()}: {values.get(field) or 'Not provided'}."
         else:
