@@ -4,6 +4,9 @@ from google import genai
 from google.genai import types
 from gemini_planner import configuration, PlannerError
 from assistant_actions import TOOLS
+from confirmation_intent import classify_confirmation, interpret_confirmation
+
+CHAT_TOOLS = [tool for tool in TOOLS if tool['name'] != 'save_task']
 
 INSTRUCTION = """You are PawPal, a demo-wide assistant for local pet owners.
 In this app, users, people, profiles and pet owners mean the same local owner
@@ -33,6 +36,7 @@ Never request saving in the same user turn as preview. Only save the latest
 proposal after the user explicitly confirms its displayed summary. Tool failures
 are failures; claim success only from an ok saved receipt. Continue after saving.
 Return either a tool action or a short reply. Omit internal IDs from replies.
+The application handles approval of previews. Never invent a save action.
 """
 
 
@@ -40,9 +44,45 @@ def respond(request, actions, history, turn):
     key, model = configuration()
     if not key:
         raise PlannerError("Gemini is not configured. You can still use the planner and Manual task entry.")
+    previous = None
+    allowed_tools = CHAT_TOOLS
+    pending = actions.state.get('proposal')
+    if pending and turn > pending['turn']:
+        preview_id = pending['id']
+        try:
+            decision = interpret_confirmation(request, pending, classify_confirmation)
+        except PlannerError:
+            return "I couldn't interpret your reply. Nothing was saved; the preview is unchanged."
+        if actions.state.get('proposal') is not pending or pending['id'] != preview_id:
+            return 'The preview changed while interpreting your reply. Nothing was saved.'
+        kind = decision['decision']
+        if kind == 'confirm':
+            for _ in range(2):
+                if actions.state.get('proposal') is not pending or pending['id'] != preview_id:
+                    return 'The preview changed. Nothing new was saved.'
+                result = actions.execute('save_task', {'proposal_id': pending['id']},
+                    'save anyway' if pending['conflicts'] else 'yes', pending['turn'] + 1)
+                if not result.get('retryable'):
+                    break
+            if result.get('saved'):
+                s = result['summary']
+                return f"Saved {s['title']} for {s['pet']} ({s['owner']}). The calendar shows the task. What would you like next?"
+            return result.get('error', 'Nothing was saved. The preview is unchanged.')
+        if kind == 'cancel':
+            actions.state.pop('proposal', None)
+            return 'Cancelled. Nothing was saved.'
+        if kind == 'unclear':
+            return decision['error']
+        if kind == 'question' and decision.get('answer'):
+            return decision['answer']
+        if kind == 'question':
+            allowed_tools = [tool for tool in CHAT_TOOLS if tool['name'] != 'preview_task']
+        if kind == 'change':
+            previous = decision['preview_summary']
+            actions.state.pop('proposal', None)
     events = []
     schema = {"type": "object", "properties": {
-        "action": {"type": "string", "enum": ["reply"] + [t["name"] for t in TOOLS]},
+        "action": {"type": "string", "enum": ["reply"] + [t["name"] for t in allowed_tools]},
         "message": {"type": "string"}, "arguments_json": {"type": "string"}},
         "required": ["action", "message", "arguments_json"]}
     try:
@@ -52,12 +92,15 @@ def respond(request, actions, history, turn):
                 payload = {"context": actions.context(), "history": history[-12:], "request": request,
                            "latest_proposal": ({k:v for k,v in actions.state["proposal"].items() if k != "draft"}
                                                if actions.state.get("proposal") else None),
+                           "previous_proposal": previous,
                            "tool_results": events}
                 response = client.models.generate_content(model=model, contents=json.dumps(payload),
-                    config=types.GenerateContentConfig(system_instruction=INSTRUCTION + "\nTools: " + json.dumps(TOOLS),
+                    config=types.GenerateContentConfig(system_instruction=INSTRUCTION + "\nTools: " + json.dumps(allowed_tools),
                         response_mime_type="application/json", response_json_schema=schema,
                         temperature=0.1, max_output_tokens=1500))
                 choice = json.loads(response.text)
+                if choice['action'] not in ['reply'] + [t['name'] for t in allowed_tools]:
+                    raise PlannerError('The assistant requested an unsupported action. Nothing was saved.')
                 if choice["action"] == "reply":
                     return str(choice["message"])[:3000]
                 result = actions.execute(choice["action"], json.loads(choice["arguments_json"] or "{}"), request, turn)

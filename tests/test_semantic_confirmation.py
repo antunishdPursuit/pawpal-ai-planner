@@ -119,6 +119,7 @@ def test_structured_classifier_validates_provider_output(monkeypatch):
         def __exit__(self, *args): pass
         def generate_content(self, **kwargs):
             assert kwargs['config'].response_json_schema['properties']['decision']['enum']
+            assert kwargs['config'].max_output_tokens == 1024
             return SimpleNamespace(text=output[0])
     monkeypatch.setattr(module.genai, 'Client', Client)
     assert module.classify_confirmation('Yes, you should.', {'pet': 'Mochi'}, []).decision == 'confirm'

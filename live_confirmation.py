@@ -6,7 +6,7 @@ from uuid import uuid4
 import wave
 from gemini_planner import PlannerError, logger
 from voice_completion import confirmed
-from confirmation_intent import classify_confirmation
+from confirmation_intent import classify_confirmation, interpret_confirmation
 from voice_planner import transcribe
 
 
@@ -66,18 +66,18 @@ def stage_save(event, actions, session):
         return {"result": {"ok": False, "decision": "unclear", "error": "I didn't catch your reply. The task preview is unchanged. Please repeat your reply."}}
     if automatic:
         try:
-            intent = classify_confirmation(text, proposal["summary"], proposal["conflicts"])
+            decision = interpret_confirmation(text, proposal, classify_confirmation)
         except PlannerError:
             logger.warning("planner_event=confirmation decision=unclear reason=provider_failure")
             return {"result": {"ok": False, "decision": "unclear", "transcript": text,
                                "error": "I couldn't interpret your reply. Nothing was saved; the preview is unchanged."}}
-        logger.info("planner_event=confirmation decision=%s", intent.decision)
-        if intent.decision in {"change", "cancel"}:
+        if state.get('proposal') is not proposal or proposal['id'] != event.get('preview_id'):
+            return failure('The preview changed while interpreting your reply. Nothing was saved.')
+        logger.info("planner_event=confirmation decision=%s", decision['decision'])
+        if decision['decision'] in {"change", "cancel"}:
             state.pop("proposal", None)
-            return {"result": {"ok": True, "decision": intent.decision, "transcript": text}}
-        if intent.decision != "confirm" or (proposal["conflicts"] and not intent.accepts_conflict):
-            return {"result": {"ok": False, "decision": "unclear", "transcript": text,
-                               "error": "Do you accept the displayed time conflict?" if proposal["conflicts"] else "Do you want me to save the displayed task, or change it?"}}
+        if decision['decision'] != 'confirm':
+            return {'result': decision}
         # Only this server-side interpretation grants approval. Never trust a
         # client-supplied transcript or decision at the commit boundary.
         text = "save anyway" if proposal["conflicts"] else "yes"

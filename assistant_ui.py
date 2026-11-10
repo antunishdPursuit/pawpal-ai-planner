@@ -214,6 +214,9 @@ def render_assistant():
                     response = commit_save(event, actions, session)
                 elif kind == "live_commit":
                     response = {"ok": False, "error": "Unsupported confirmation action."}
+                elif (call.get('name') == 'preview_task' and state.get('proposal')
+                      and event.get('preview_id') == state['proposal']['id']):
+                    response = {'ok': False, 'error': 'Keep the displayed preview unchanged. Answer the question with read tools; a change needs a new user request.'}
                 else:
                     response = actions.execute(call.get("name"), call.get("args", {}),
                                                str(event.get("utterance", ""))[:2000], turn)
