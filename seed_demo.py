@@ -4,9 +4,9 @@ from datetime import date, time
 from pathlib import Path
 from uuid import NAMESPACE_URL, uuid5
 
-from pawpal_system import Owner, Pet, Task
-from planner_storage import PlannerStore
-from task_contract import TaskDraft
+from pawpal.domain.pawpal_system import Owner, Pet, Task
+from pawpal.domain.planner_storage import PlannerStore
+from pawpal.domain.task_contract import TaskDraft
 
 
 DEMO_WEEK = date(2026, 11, 16)

@@ -6,7 +6,7 @@ import shutil
 import pytest
 from PIL import Image
 
-from sable_assets import companion_assets
+from pawpal.assistant.sable_assets import companion_assets
 
 
 def test_runtime_loads_from_fresh_directory_without_source_art(tmp_path):

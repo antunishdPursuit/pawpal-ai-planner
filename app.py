@@ -5,17 +5,17 @@ import sqlite3
 from zoneinfo import available_timezones
 
 import streamlit as st
-from app_theme import apply_theme, favicon
-from calendar_view import CalendarEntry, entries_for_day, filter_entries, community_entries, community_overdue
-from pawpal_system import Scheduler
-from planner_clock import local_today, using_timezone
-from planner_storage import PlannerStore
-from task_editor import show_editor, open_editor, close_editor, cancel_editor, has_unsaved_draft, map_search_url, snapshot_current_draft, remember_active_draft
-from gemini_planner import is_configured, configuration
-from ui_components import task_summary, calendar_item, brand, planner_header, pet_identity, task_state
-from calendar_presentation import render_timeline
-from homepage import show_home
-from assistant_ui import render_assistant, suspend_assistant
+from pawpal.presentation.app_theme import apply_theme, favicon
+from pawpal.domain.calendar_view import CalendarEntry, entries_for_day, filter_entries, community_entries, community_overdue
+from pawpal.domain.pawpal_system import Scheduler
+from pawpal.domain.planner_clock import local_today, using_timezone
+from pawpal.domain.planner_storage import PlannerStore
+from pawpal.planning.task_editor import show_editor, open_editor, close_editor, cancel_editor, has_unsaved_draft, map_search_url, snapshot_current_draft, remember_active_draft
+from pawpal.planning.gemini_planner import is_configured, configuration
+from pawpal.presentation.ui_components import task_summary, calendar_item, brand, planner_header, pet_identity, task_state
+from pawpal.presentation.calendar_presentation import render_timeline
+from pawpal.presentation.homepage import show_home
+from pawpal.assistant.assistant_ui import render_assistant, suspend_assistant
 
 st.set_page_config(page_title="PawPal AI Planner", page_icon=favicon(), layout="wide", initial_sidebar_state="auto")
 apply_theme()

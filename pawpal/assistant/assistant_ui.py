@@ -8,18 +8,18 @@ import base64
 from uuid import uuid4
 import streamlit as st
 from streamlit.runtime.scriptrunner import get_script_run_ctx
-from gemini_planner import is_configured, PlannerError
-from planner_storage import PlannerStore
-from assistant_actions import AssistantActions
-from assistant_model import respond
-from assistant_live import prepare_live
-from live_confirmation import stage_save, commit_save
-from sable_assets import companion_assets
+from pawpal.planning.gemini_planner import is_configured, PlannerError
+from pawpal.domain.planner_storage import PlannerStore
+from pawpal.assistant.assistant_actions import AssistantActions
+from pawpal.assistant.assistant_model import respond
+from pawpal.assistant.assistant_live import prepare_live
+from pawpal.planning.live_confirmation import stage_save, commit_save
+from pawpal.assistant.sable_assets import companion_assets
 
 
 @st.cache_resource
 def assistant_component():
-    root = Path(__file__).parent / "assets"
+    root = Path(__file__).parent.parent.parent / "assets"
     return st.components.v2.component(
         "pawpal_assistant", html='<div class="paw-assistant-root"></div>'
         '<div class="paw-sable-assets" hidden>' + html.escape(json.dumps(companion_assets())) + '</div>'

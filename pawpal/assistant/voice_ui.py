@@ -6,17 +6,17 @@ from pathlib import Path
 from uuid import uuid4
 from time import monotonic
 import streamlit as st
-from gemini_planner import decode_proposal, PlannerError, is_configured
-from voice_planner import live_credential, transcribe
-from voice_completion import save_voice_task
-from voice_status import connection_diagnostic, connection_error_message, record_connection_end
-from voice_telemetry import record_voice_event
+from pawpal.planning.gemini_planner import decode_proposal, PlannerError, is_configured
+from pawpal.assistant.voice_planner import live_credential, transcribe
+from pawpal.assistant.voice_completion import save_voice_task
+from pawpal.assistant.voice_status import connection_diagnostic, connection_error_message, record_connection_end
+from pawpal.assistant.voice_telemetry import record_voice_event
 
 
 @st.cache_resource
 def voice_component():
     record_voice_event("diagnostics_enabled")
-    root = Path(__file__).parent / "assets"
+    root = Path(__file__).parent.parent.parent / "assets"
     return st.components.v2.component(
         "pawpal_voice", html=(root / "voice.html").read_text(encoding="utf-8"),
         css=(root / "voice.css").read_text(encoding="utf-8"),
@@ -100,7 +100,7 @@ def render_voice(store, owner, profiles, replace_allowed):
                               and i.get("role") == "user" and isinstance(i.get("text"), str)]
                 saved = save_voice_task(store, owner, event.get("proposal"), utterances[-1] if utterances else "",
                                         credential["session_id"], event.get("proposal_id"))
-                from task_editor import cancel_editor
+                from pawpal.planning.task_editor import cancel_editor
                 cancel_editor()
                 st.session_state.pending_selected_day = saved.due_date
                 st.session_state.voice_calendar_target = {"owner_id": owner.owner_id, "pet_id": saved.assigned_pet_id}

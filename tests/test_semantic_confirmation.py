@@ -1,10 +1,10 @@
 from types import SimpleNamespace
 import sqlite3
 import pytest
-import live_confirmation as confirmation
-from confirmation_intent import ConfirmationIntent
-from gemini_planner import PlannerError
-from planner_storage import PlannerStore
+import pawpal.planning.live_confirmation as confirmation
+from pawpal.planning.confirmation_intent import ConfirmationIntent
+from pawpal.planning.gemini_planner import PlannerError
+from pawpal.domain.planner_storage import PlannerStore
 from test_live_confirmation import fixture
 
 
@@ -109,7 +109,7 @@ def test_conflict_needs_semantic_explicit_acceptance(tmp_path, monkeypatch, acce
 
 
 def test_structured_classifier_validates_provider_output(monkeypatch):
-    import confirmation_intent as module
+    import pawpal.planning.confirmation_intent as module
     monkeypatch.setattr(module, 'configuration', lambda: ('test-only', 'test-model'))
     output = ['{"decision":"confirm","accepts_conflict":false}']
     class Client:

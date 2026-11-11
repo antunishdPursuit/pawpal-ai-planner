@@ -1,7 +1,7 @@
 from datetime import date
 import sqlite3
-from assistant_actions import AssistantActions
-from planner_storage import PlannerStore
+from pawpal.assistant.assistant_actions import AssistantActions
+from pawpal.domain.planner_storage import PlannerStore
 
 
 def fixture(tmp_path):
@@ -106,12 +106,12 @@ def test_failed_save_can_retry_on_next_confirmed_turn_without_duplicate(tmp_path
 
 def test_tool_results_have_fresh_dates_for_new_owner_and_reject_bad_types(tmp_path,monkeypatch):
     root,o1,o2,p1,p2,a=fixture(tmp_path)
-    monkeypatch.setattr("assistant_actions.local_today",lambda:date(2026,12,31))
+    monkeypatch.setattr("pawpal.assistant.assistant_actions.local_today",lambda:date(2026,12,31))
     assert a.execute("get_context",{})["context"]["owners"][0]["today"]=="2026-12-31"
     new=root.create_profile("New zone owner","Pacific/Kiritimati")
     result=a.execute("list_owners",{})
     assert next(o for o in result["current_context"]["owners"] if o["owner_id"]==new.owner_id)["timezone"]==new.timezone
-    monkeypatch.setattr("assistant_actions.local_today",lambda:date(2027,1,1))
+    monkeypatch.setattr("pawpal.assistant.assistant_actions.local_today",lambda:date(2027,1,1))
     assert a.execute("get_context",{})["context"]["owners"][0]["today"]=="2027-01-01"
     for name,args in [("find_pets",{"query":123}),("show_pets",{"owner_id":True})]:
         assert not a.execute(name,args)["ok"]

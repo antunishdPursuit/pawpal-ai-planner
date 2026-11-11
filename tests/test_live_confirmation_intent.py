@@ -3,7 +3,7 @@ import json
 import os
 from pathlib import Path
 import pytest
-from confirmation_intent import classify_confirmation
+from pawpal.planning.confirmation_intent import classify_confirmation
 
 CASES = json.loads((Path(__file__).parent/'fixtures/confirmation_cases.json').read_text())
 

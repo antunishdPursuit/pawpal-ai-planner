@@ -1,5 +1,5 @@
 import pytest
-from voice_completion import confirmed
+from pawpal.assistant.voice_completion import confirmed
 
 
 @pytest.mark.parametrize('text', [

@@ -4,10 +4,10 @@ import json
 from uuid import uuid4
 from google import genai
 from google.genai import types
-from assistant_actions import TOOLS
-from assistant_model import INSTRUCTION
-from gemini_planner import configuration, PlannerError
-from voice_planner import LIVE_MODEL
+from pawpal.assistant.assistant_actions import TOOLS
+from pawpal.assistant.assistant_model import INSTRUCTION
+from pawpal.planning.gemini_planner import configuration, PlannerError
+from pawpal.assistant.voice_planner import LIVE_MODEL
 
 
 def prepare_live(context, history):

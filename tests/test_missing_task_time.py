@@ -1,9 +1,9 @@
 import json
 from types import SimpleNamespace
-from assistant_actions import AssistantActions
-from planner_storage import PlannerStore
-from gemini_planner import decode_proposal, MISSING_TIME_MESSAGE
-import assistant_model
+from pawpal.assistant.assistant_actions import AssistantActions
+from pawpal.domain.planner_storage import PlannerStore
+from pawpal.planning.gemini_planner import decode_proposal, MISSING_TIME_MESSAGE
+import pawpal.assistant.assistant_model as assistant_model
 
 
 def fixture(tmp_path):

@@ -2,10 +2,10 @@ from datetime import date, time, timedelta
 
 import pytest
 
-from calendar_view import community_entries
-from planner_storage import PlannerStore
+from pawpal.domain.calendar_view import community_entries
+from pawpal.domain.planner_storage import PlannerStore
 from seed_demo import DEMO_WEEK, PROFILES, seed_demo
-from task_contract import TaskDraft
+from pawpal.domain.task_contract import TaskDraft
 
 
 def rows(store):

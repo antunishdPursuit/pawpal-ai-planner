@@ -2,9 +2,9 @@
 import json
 from google import genai
 from google.genai import types
-from gemini_planner import configuration, PlannerError
-from assistant_actions import TOOLS
-from confirmation_intent import classify_confirmation, interpret_confirmation
+from pawpal.planning.gemini_planner import configuration, PlannerError
+from pawpal.assistant.assistant_actions import TOOLS
+from pawpal.planning.confirmation_intent import classify_confirmation, interpret_confirmation
 
 CHAT_TOOLS = [tool for tool in TOOLS if tool['name'] != 'save_task']
 

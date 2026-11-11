@@ -7,8 +7,8 @@ from pathlib import Path
 from threading import RLock
 from uuid import UUID
 
-from planner_storage import default_database
-from voice_status import connection_diagnostic
+from pawpal.domain.planner_storage import default_database
+from pawpal.assistant.voice_status import connection_diagnostic
 
 MAX_BYTES = 1024 * 1024
 BACKUPS = 3

@@ -3,11 +3,11 @@ import json
 import sqlite3
 from types import SimpleNamespace
 import pytest
-import assistant_model as typed
-import live_confirmation as voice
-from confirmation_intent import ConfirmationIntent
-from gemini_planner import PlannerError
-from planner_storage import PlannerStore
+import pawpal.assistant.assistant_model as typed
+import pawpal.planning.live_confirmation as voice
+from pawpal.planning.confirmation_intent import ConfirmationIntent
+from pawpal.planning.gemini_planner import PlannerError
+from pawpal.domain.planner_storage import PlannerStore
 from test_live_confirmation import fixture
 
 
@@ -178,7 +178,7 @@ def test_typed_storage_retry_is_bounded_without_new_consent(tmp_path, monkeypatc
 
 def test_live_question_cannot_replace_the_pending_preview(tmp_path, monkeypatch):
     from test_assistant_bridge import harness, audio
-    from assistant_actions import AssistantActions
+    from pawpal.assistant.assistant_actions import AssistantActions
     root, owner, pet, state, events, drain = harness(tmp_path, monkeypatch)
     events.append({'id': 'prepare', 'kind': 'prepare_voice'}); drain()
     actions = AssistantActions(root.path, state['assistant_state'])

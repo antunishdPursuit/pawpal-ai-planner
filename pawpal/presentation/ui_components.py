@@ -1,9 +1,9 @@
 """Escaped, presentational components; all actions use native widgets."""
 from html import escape
 from base64 import b64encode
-from app_theme import favicon
+from pawpal.presentation.app_theme import favicon
 from pathlib import Path
-from calendar_presentation import CalendarItem
+from pawpal.presentation.calendar_presentation import CalendarItem
 import streamlit as st
 
 

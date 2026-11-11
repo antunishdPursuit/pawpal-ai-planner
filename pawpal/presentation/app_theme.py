@@ -6,11 +6,11 @@ import streamlit as st
 
 @st.cache_data
 def _asset_data(name):
-    return b64encode((Path(__file__).parent / "assets" / name).read_bytes()).decode("ascii")
+    return b64encode((Path(__file__).parent.parent.parent / "assets" / name).read_bytes()).decode("ascii")
 
 
 def apply_theme():
-    assets = Path(__file__).parent / "assets"
+    assets = Path(__file__).parent.parent.parent / "assets"
     css = "\n".join((assets / name).read_text(encoding="utf8") for name in ("app.css", "calendar.css"))
     workspace = (assets / "workspace.css").read_text(encoding="utf8")
     workspace = workspace.replace("__PLANNER_FONT__", "data:font/ttf;base64," + _asset_data("fonts/DMSans.ttf"))
@@ -19,4 +19,4 @@ def apply_theme():
 
 
 def favicon():
-    return str(Path(__file__).parent / "assets" / "favicon.png")
+    return str(Path(__file__).parent.parent.parent / "assets" / "favicon.png")

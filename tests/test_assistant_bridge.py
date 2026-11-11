@@ -2,10 +2,10 @@ from types import SimpleNamespace
 from io import BytesIO
 import base64
 import wave
-import live_confirmation
-import assistant_ui as ui
-from assistant_actions import AssistantActions
-from planner_storage import PlannerStore
+import pawpal.planning.live_confirmation as live_confirmation
+import pawpal.assistant.assistant_ui as ui
+from pawpal.assistant.assistant_actions import AssistantActions
+from pawpal.domain.planner_storage import PlannerStore
 
 
 class State(dict):
@@ -275,7 +275,7 @@ def test_arrival_enters_only_the_destination_and_ignores_stale_entrance(tmp_path
 
 
 def test_app_confirmation_saves_without_conversational_save_call(tmp_path, monkeypatch):
-    from confirmation_intent import ConfirmationIntent
+    from pawpal.planning.confirmation_intent import ConfirmationIntent
     root, owner, pet, state, events, drain = harness(tmp_path, monkeypatch)
     monkeypatch.setattr(live_confirmation, 'transcribe', lambda *args: 'Yes, you should.')
     monkeypatch.setattr(live_confirmation, 'classify_confirmation', lambda *args:

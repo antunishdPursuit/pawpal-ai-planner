@@ -7,7 +7,7 @@ def calendar_app():
     source = Path("app.py").read_text(encoding="utf-8").rsplit("\nmain()", 1)[0]
     fixture = """
 from datetime import date
-from pawpal_system import Owner
+from pawpal.domain.pawpal_system import Owner
 st.session_state.setdefault("calendar_date", date(2026, 11, 6))
 owner = Owner("Calendar fixture")
 calendar_workspace(None, owner, [owner])
@@ -85,7 +85,7 @@ def personal_calendar_fixture():
     source = Path("app.py").read_text(encoding="utf-8").rsplit("\nmain()", 1)[0]
     fixture = """
 from datetime import date, time, timedelta
-from pawpal_system import Owner, Pet, Task
+from pawpal.domain.pawpal_system import Owner, Pet, Task
 if "fixture_owners" not in st.session_state:
     owner = Owner("Current")
     first, second = Pet("First", "cat", 2), Pet("Second", "dog", 1)

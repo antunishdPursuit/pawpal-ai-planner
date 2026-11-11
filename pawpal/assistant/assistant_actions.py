@@ -3,12 +3,12 @@ from datetime import date, time
 import sqlite3
 from uuid import uuid4
 
-from calendar_view import entries_for_day, draft_conflicts
-from planner_clock import local_today, using_timezone
-from planner_storage import PlannerStore
-from task_contract import TaskDraft
-from voice_completion import confirmed
-from gemini_planner import _ambiguous_time, MISSING_TIME_MESSAGE
+from pawpal.domain.calendar_view import entries_for_day, draft_conflicts
+from pawpal.domain.planner_clock import local_today, using_timezone
+from pawpal.domain.planner_storage import PlannerStore
+from pawpal.domain.task_contract import TaskDraft
+from pawpal.assistant.voice_completion import confirmed
+from pawpal.planning.gemini_planner import _ambiguous_time, MISSING_TIME_MESSAGE
 
 
 def field_schema(kind, description=""):

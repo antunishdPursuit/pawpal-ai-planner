@@ -1,6 +1,6 @@
 from datetime import date
-import task_editor as editor
-from task_contract import TaskDraft
+import pawpal.planning.task_editor as editor
+from pawpal.domain.task_contract import TaskDraft
 
 
 class State(dict):

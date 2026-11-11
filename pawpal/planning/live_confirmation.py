@@ -4,10 +4,10 @@ from hashlib import sha256
 from io import BytesIO
 from uuid import uuid4
 import wave
-from gemini_planner import PlannerError, logger
-from voice_completion import confirmed
-from confirmation_intent import classify_confirmation, interpret_confirmation
-from voice_planner import transcribe
+from pawpal.planning.gemini_planner import PlannerError, logger
+from pawpal.assistant.voice_completion import confirmed
+from pawpal.planning.confirmation_intent import classify_confirmation, interpret_confirmation
+from pawpal.assistant.voice_planner import transcribe
 
 
 def failure(message):

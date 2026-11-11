@@ -2,10 +2,10 @@ import base64
 from io import BytesIO
 import wave
 import pytest
-import live_confirmation as confirmation
-from assistant_actions import AssistantActions
-from planner_storage import PlannerStore
-from gemini_planner import PlannerError
+import pawpal.planning.live_confirmation as confirmation
+from pawpal.assistant.assistant_actions import AssistantActions
+from pawpal.domain.planner_storage import PlannerStore
+from pawpal.planning.gemini_planner import PlannerError
 
 
 def fixture(tmp_path):

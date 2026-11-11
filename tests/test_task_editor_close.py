@@ -1,7 +1,7 @@
 from datetime import date,time
 from uuid import uuid4
-import task_editor
-from task_contract import TaskDraft
+import pawpal.planning.task_editor as task_editor
+from pawpal.domain.task_contract import TaskDraft
 
 
 class State(dict):

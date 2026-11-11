@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from datetime import date, time, timedelta
 from enum import Enum
 from typing import Optional
-from planner_clock import local_today
+from pawpal.domain.planner_clock import local_today
 
 
 class ScheduleType(Enum):

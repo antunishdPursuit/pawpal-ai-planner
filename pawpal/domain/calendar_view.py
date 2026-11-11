@@ -2,8 +2,8 @@
 from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
-from pawpal_system import Owner, Task, ScheduleType, Scheduler
-from planner_clock import local_today, using_timezone
+from pawpal.domain.pawpal_system import Owner, Task, ScheduleType, Scheduler
+from pawpal.domain.planner_clock import local_today, using_timezone
 
 
 @dataclass(frozen=True)

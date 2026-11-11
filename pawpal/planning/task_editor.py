@@ -5,12 +5,12 @@ import sqlite3
 from urllib.parse import urlencode
 import streamlit as st
 
-from calendar_view import draft_conflicts
-from planner_clock import local_today
-from task_contract import TaskDraft
-from gemini_planner import GeminiPlanner, PlannerError, is_configured
-from app_theme import favicon
-from voice_telemetry import record_voice_event
+from pawpal.domain.calendar_view import draft_conflicts
+from pawpal.domain.planner_clock import local_today
+from pawpal.domain.task_contract import TaskDraft
+from pawpal.planning.gemini_planner import GeminiPlanner, PlannerError, is_configured
+from pawpal.presentation.app_theme import favicon
+from pawpal.assistant.voice_telemetry import record_voice_event
 
 DRAFT_SLOTS = {"Conversation": "conversation_draft", "Manual": "manual_draft"}
 

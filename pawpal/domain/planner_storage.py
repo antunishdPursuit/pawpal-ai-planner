@@ -7,12 +7,12 @@ from pathlib import Path
 import sqlite3
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pawpal_system import (
+from pawpal.domain.pawpal_system import (
     Owner, Pet, Task, Schedule, ScheduleType, Scheduler,
     _owner_ids, _pet_ids, _task_ids,
 )
-from planner_clock import using_timezone
-from task_contract import TaskDraft, clean_text
+from pawpal.domain.planner_clock import using_timezone
+from pawpal.domain.task_contract import TaskDraft, clean_text
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS owner (
@@ -254,7 +254,7 @@ class PlannerStore:
             if existing:
                 return existing
             draft = draft.validate(owner)
-            from calendar_view import draft_conflicts
+            from pawpal.domain.calendar_view import draft_conflicts
             with using_timezone(owner.timezone):
                 if draft_conflicts(owner, draft) and not allow_conflicts:
                     raise ValueError("This time conflicts with another task. Review the warning and choose whether to keep it.")
@@ -280,7 +280,7 @@ class PlannerStore:
             if task is None:
                 raise ValueError("Task no longer exists. Refresh the calendar.")
             with using_timezone(owner.timezone):
-                from planner_clock import local_today
+                from pawpal.domain.planner_clock import local_today
                 if task.status != "done" and task.due_date is not None and task.due_date > local_today():
                     raise ValueError("Complete this task when it is due.")
                 next_task = Scheduler.complete_and_reschedule(task, owner.get_pet(task.assigned_pet_id))

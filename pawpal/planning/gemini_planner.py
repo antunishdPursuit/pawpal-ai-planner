@@ -14,9 +14,9 @@ from google import genai
 from google.genai import types
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from pawpal_system import Owner
-from planner_clock import local_today, using_timezone
-from task_contract import TaskDraft, clean_text
+from pawpal.domain.pawpal_system import Owner
+from pawpal.domain.planner_clock import local_today, using_timezone
+from pawpal.domain.task_contract import TaskDraft, clean_text
 
 logger = logging.getLogger("pawpal.planner")
 if not logger.handlers:
@@ -81,7 +81,7 @@ class PlannerError(RuntimeError):
 
 
 def configuration():
-    values = dotenv_values(Path(__file__).parent / ".env", encoding="utf-8-sig", interpolate=False)
+    values = dotenv_values(Path(__file__).parent.parent.parent / ".env", encoding="utf-8-sig", interpolate=False)
     key = (os.environ.get("GEMINI_API_KEY") or values.get("GEMINI_API_KEY") or "").strip()
     model = (os.environ.get("GEMINI_MODEL") or values.get("GEMINI_MODEL") or DEFAULT_MODEL).strip()
     return key, model

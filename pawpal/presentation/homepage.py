@@ -3,9 +3,9 @@ import base64
 from pathlib import Path
 
 import streamlit as st
-from calendar_presentation import CalendarItem, render_timeline
+from pawpal.presentation.calendar_presentation import CalendarItem, render_timeline
 
-ASSETS = Path(__file__).parent / "assets"
+ASSETS = Path(__file__).parent.parent.parent / "assets"
 
 
 @st.cache_data

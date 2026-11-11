@@ -2,7 +2,7 @@
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, time
 from uuid import uuid4
-from pawpal_system import Owner
+from pawpal.domain.pawpal_system import Owner
 
 
 def clean_text(value: str, label: str, limit: int, required=False) -> str:

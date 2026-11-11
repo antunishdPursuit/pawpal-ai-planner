@@ -1,5 +1,5 @@
 from datetime import date, time
-from pawpal_system import Owner, Pet, Task, Schedule, ScheduleType, Scheduler
+from pawpal.domain.pawpal_system import Owner, Pet, Task, Schedule, ScheduleType, Scheduler
 
 
 # --- Setup Owner ---

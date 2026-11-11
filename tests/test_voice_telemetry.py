@@ -2,7 +2,7 @@ from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
 import json
 
-from voice_telemetry import record_voice_event
+from pawpal.assistant.voice_telemetry import record_voice_event
 
 
 def read(path):

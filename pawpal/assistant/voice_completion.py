@@ -3,9 +3,9 @@ from dataclasses import replace
 import json
 import re
 from uuid import UUID, uuid5
-from calendar_view import draft_conflicts
-from gemini_planner import decode_proposal, PlannerError
-from planner_clock import using_timezone
+from pawpal.domain.calendar_view import draft_conflicts
+from pawpal.planning.gemini_planner import decode_proposal, PlannerError
+from pawpal.domain.planner_clock import using_timezone
 
 
 # Match complete affirmative clauses, never a positive substring inside a change

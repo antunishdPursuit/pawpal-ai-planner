@@ -4,7 +4,7 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from pawpal_system import Pet, Task, Schedule, ScheduleType, Scheduler
+from pawpal.domain.pawpal_system import Pet, Task, Schedule, ScheduleType, Scheduler
 
 
 def test_mark_complete_sets_last_completed_date():

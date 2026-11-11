@@ -4,6 +4,17 @@ PawPal AI Planner is a local pet-care calendar that turns a typed or spoken requ
 
 The planner combines persistent local storage, a personal calendar, and Gemini-assisted task planning with validation and human confirmation.
 
+## Project layout
+
+- `app.py` is the Streamlit entry point for the planner.
+- `pawpal/domain/` contains pets, tasks, calendar data, clocks, and local storage.
+- `pawpal/planning/` contains AI proposals, confirmation, and task editing.
+- `pawpal/assistant/` contains Sable and typed/voice assistant behavior.
+- `pawpal/presentation/` contains the page layout, theme, and visual components.
+- `assets/` contains the styles, browser scripts, images, and bundled voice assets used by the app.
+- `tests/` contains the Python and browser-script tests; `diagrams/` contains the architecture and data diagrams.
+- `seed_demo.py` creates optional fictional presentation data. `examples/main.py` preserves the earlier standalone model example; run it with `python -m examples.main`. It is not the planner entry point.
+
 ## What it does
 
 - Organize pets and care tasks in a personal calendar for the active pet owner.

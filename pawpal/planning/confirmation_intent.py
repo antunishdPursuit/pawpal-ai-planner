@@ -5,7 +5,7 @@ from typing import Literal
 from google import genai
 from google.genai import types
 from pydantic import BaseModel, ConfigDict
-from gemini_planner import configuration, PlannerError
+from pawpal.planning.gemini_planner import configuration, PlannerError
 
 
 class ConfirmationIntent(BaseModel):

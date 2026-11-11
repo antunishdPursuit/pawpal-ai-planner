@@ -7,8 +7,8 @@ from uuid import uuid4
 import wave
 from google import genai
 from google.genai import types
-from gemini_planner import configuration, INSTRUCTION, PlanResponse, PlannerError
-from planner_clock import local_today, using_timezone
+from pawpal.planning.gemini_planner import configuration, INSTRUCTION, PlanResponse, PlannerError
+from pawpal.domain.planner_clock import local_today, using_timezone
 
 LIVE_MODEL = "gemini-3.8-live"
 

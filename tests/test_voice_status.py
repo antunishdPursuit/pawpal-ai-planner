@@ -1,5 +1,5 @@
 import logging
-from voice_status import connection_diagnostic, connection_error_message, record_connection_end
+from pawpal.assistant.voice_status import connection_diagnostic, connection_error_message, record_connection_end
 
 
 def test_close_reason_is_bounded_and_credentials_are_not_retained(caplog):

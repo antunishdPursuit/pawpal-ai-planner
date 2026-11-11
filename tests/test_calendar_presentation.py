@@ -3,8 +3,8 @@ from types import SimpleNamespace
 import re
 import pytest
 
-from calendar_presentation import CalendarItem, render_timeline
-from ui_components import calendar_item
+from pawpal.presentation.calendar_presentation import CalendarItem, render_timeline
+from pawpal.presentation.ui_components import calendar_item
 
 
 def test_task_labels_are_escaped_and_tones_are_not_injected():
