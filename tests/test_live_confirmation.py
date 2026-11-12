@@ -1,6 +1,7 @@
 import base64
 from io import BytesIO
 import wave
+from datetime import datetime, timezone
 import pytest
 import pawpal.planning.live_confirmation as confirmation
 from pawpal.assistant.assistant_actions import AssistantActions
@@ -22,7 +23,8 @@ def fixture(tmp_path):
     event={"session_id":"session","call":{"id":"save","name":"save_task","args":{"proposal_id":proposal["proposal_id"]}},
            "turn":2,"audio_turn":2,"preview_id":proposal["proposal_id"],"audio":base64.b64encode(stream.getvalue()).decode(),
            "utterance":"Create a walk. (stale Live transcript)"}
-    session={"id":"session","base_turn":0,"audio_turn":2,"audio_closed":True}
+    session={"id":"session","base_turn":0,"audio_turn":2,"audio_closed":True,
+             "request_times":{2:datetime.now(timezone.utc).isoformat()}}
     return root,owner,actions,event,session
 
 

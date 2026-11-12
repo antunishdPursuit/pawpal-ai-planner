@@ -2,9 +2,10 @@
 import json
 from google import genai
 from google.genai import types
-from pawpal.planning.gemini_planner import configuration, PlannerError
+from pawpal.planning.gemini_planner import configuration, PlannerError, logger
 from pawpal.assistant.assistant_actions import TOOLS
 from pawpal.planning.confirmation_intent import classify_confirmation, interpret_confirmation
+from pawpal.planning.date_intent import remember_request
 
 CHAT_TOOLS = [tool for tool in TOOLS if tool['name'] != 'save_task']
 
@@ -47,6 +48,7 @@ def respond(request, actions, history, turn):
     key, model = configuration()
     if not key:
         raise PlannerError("Gemini is not configured. You can still use the planner and Manual task entry.")
+    remember_request(actions.state, request)
     previous = actions.state.get('correction_context')
     allowed_tools = CHAT_TOOLS
     pending = actions.state.get('proposal')
@@ -72,6 +74,7 @@ def respond(request, actions, history, turn):
                 return f"Saved {s['title']} for {s['pet']} ({s['owner']}). The calendar shows the task. What would you like next?"
             return result.get('error', 'Nothing was saved. The preview is unchanged.')
         if kind == 'cancel':
+            actions.state.pop('date_requests', None)
             actions.state.pop('proposal', None)
             actions.state.pop('correction_context', None)
             return 'Cancelled. Nothing was saved.'
@@ -130,7 +133,7 @@ def respond(request, actions, history, turn):
                     else:
                         from datetime import time
                         at = time.fromisoformat(summary["time"]).strftime("%I:%M %p").lstrip("0") + " (" + summary["timezone"] + ")"
-                    details = f"{summary['title']} for {summary['pet']} ({summary['owner']}) on {summary['date']} at {at}."
+                    details = f"{summary['title']} for {summary['pet']} ({summary['owner']}) on {summary['weekday']}, {summary['date']} at {at}."
                     return details + (" Shall I save it?" if not result["conflicts"] else " There is a time conflict. Say save anyway to accept, or ask for a change.")
                 if result.get("saved"):
                     s = result["summary"]
@@ -138,5 +141,6 @@ def respond(request, actions, history, turn):
             return "Please narrow that request to one owner, pet, or calendar action."
     except (PlannerError,):
         raise
-    except Exception:
+    except Exception as error:
+        logger.warning('planner_event=typed_request reason=%s', type(error).__name__)
         raise PlannerError("PawPal could not finish that request. Your conversation is retained; try again or use the planner.") from None

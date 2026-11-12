@@ -44,6 +44,7 @@ def test_task_dialog_ai_also_clarifies_missing_time(tmp_path):
 
 
 def fake_model(monkeypatch,args):
+    monkeypatch.setattr('pawpal.assistant.assistant_actions.verify_date', lambda *args: None)
     choice=SimpleNamespace(text=json.dumps(dict(action="preview_task",message="",arguments_json=json.dumps(args))))
     class Client:
         def __init__(self,**kwargs): self.models=SimpleNamespace(generate_content=lambda **kwargs:choice)

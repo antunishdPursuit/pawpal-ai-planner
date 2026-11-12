@@ -9,6 +9,8 @@ from pawpal.domain.planner_storage import PlannerStore
 from pawpal.domain.task_contract import TaskDraft
 from pawpal.assistant.voice_completion import confirmed
 from pawpal.planning.gemini_planner import _ambiguous_time, MISSING_TIME_MESSAGE
+from pawpal.planning.date_intent import verify_date
+from pawpal.planning.gemini_planner import PlannerError
 
 
 def field_schema(kind, description=""):
@@ -108,7 +110,7 @@ class AssistantActions:
             except (sqlite3.Error, OSError):
                 result["context_refresh_failed"] = True
             return result
-        except (ValueError, TypeError, KeyError) as error:
+        except (ValueError, TypeError, KeyError, PlannerError) as error:
             return {"ok": False, "error": str(error)}
         except (sqlite3.Error, OSError):
             if name == "save_task" and self.state.get("proposal"):
@@ -170,6 +172,13 @@ class AssistantActions:
             owner = self.owner(pending["owner_id"])
             draft = pending["draft"].validate(owner)
             existing = next((t for t in owner.get_all_tasks() if t.creation_request_id == draft.request_id), None)
+            if existing is None and pending.get('date_verified'):
+                try:
+                    verify_date(self.state.get('date_requests', []), draft.due_date.isoformat(),
+                                self.today(owner), owner.timezone, self.state.setdefault('date_cache', {}))
+                except (PlannerError, ValueError, TypeError, KeyError):
+                    self.state.pop('proposal', None)
+                    raise
             with using_timezone(owner.timezone):
                 current_conflicts = draft_conflicts(owner, draft) if existing is None else pending["conflicts"]
             if current_conflicts != pending["conflicts"]:
@@ -184,6 +193,7 @@ class AssistantActions:
             result = {"ok": True, "saved": True, "task_id": task.task_id, "summary": pending["summary"]}
             self.state["receipts"][proposal_id] = result
             self.state.pop("proposal", None)
+            self.state.pop('date_requests', None)
             return result
         owner = self.owner(args["owner_id"])
         pet_id = args.get("pet_id")
@@ -208,6 +218,9 @@ class AssistantActions:
                 raise ValueError("Do you mean AM or PM? Please clarify before creating the preview.")
             # A change request invalidates any earlier confirmation, including invalid replacements.
             self.state.pop("proposal", None)
+            if 'date_requests' in self.state:
+                verify_date(self.state['date_requests'], args['due_date'], self.today(owner), owner.timezone,
+                            self.state.setdefault('date_cache', {}))
             if args["time_of_day"] is None and not args.get("anytime_confirmed", False):
                 return {"ok": False, "needs_time": True, "error": MISSING_TIME_MESSAGE}
             draft = TaskDraft(pet_id, args["title"], date.fromisoformat(args["due_date"]),
@@ -217,12 +230,13 @@ class AssistantActions:
             with using_timezone(owner.timezone):
                 conflicts = draft_conflicts(owner, draft)
             summary = {"owner": owner.name, "pet": owner.get_pet(pet_id).name,
-                       "title": draft.title, "date": draft.due_date.isoformat(),
+                       "title": draft.title, "date": draft.due_date.isoformat(), "weekday": draft.due_date.strftime('%A'),
                        "time": draft.time_of_day.strftime("%H:%M") if draft.time_of_day else "Anytime",
                        "timezone": owner.timezone, "repeat": draft.repeat,
                        "interval_days": draft.interval_days, "location": draft.location, "description": draft.description}
             pending = {"id": str(uuid4()), "owner_id": owner.owner_id, "draft": draft,
-                       "turn": turn, "summary": summary, "conflicts": conflicts}
+                       "turn": turn, "summary": summary, "conflicts": conflicts,
+                       "date_verified": 'date_requests' in self.state}
             self.state["proposal"] = pending
             self.route(owner, "Calendar", pet_id, draft.due_date.isoformat())
             return {"ok": True, "proposal_id": pending["id"], "summary": summary,

@@ -59,6 +59,8 @@ def test_question_then_later_approval_keeps_one_preview_and_one_save(tmp_path, m
 
 
 def model_choice(monkeypatch, choice, check=lambda payload: None):
+    # These transport tests mock language decisions; date semantics has its own suite.
+    monkeypatch.setattr('pawpal.assistant.assistant_actions.verify_date', lambda *args: None)
     class Client:
         def __init__(self, **kwargs): self.models = self
         def __enter__(self): return self

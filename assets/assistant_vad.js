@@ -23,29 +23,29 @@ export async function createVoiceDetector(model, wasm, runtime=ort) {
 /** Serialize recurrent inference and discard stale audio on mute/Stop/output gates. */
 export function createSpeechGate(detector,accept,fail) {
  let epoch=0,tail=Promise.resolve(),pending=0,remainder=new Float32Array(0),source=new Float32Array(0),position=0,reset=false;
- let metadata=null;
+ let metadata=null,frameTime=0;
  function clear(){epoch++;remainder=new Float32Array(0);source=new Float32Array(0);position=0;metadata=null;reset=true;}
- function push(chunk,rate,preview){
+ function push(chunk,rate,preview,at=Date.now()-chunk.length/rate*1000){
   if(!Number.isFinite(rate)||rate<16000||rate>96000)throw new Error('Unsupported microphone rate');
-  const input=new Float32Array(source.length+chunk.length);input.set(source);input.set(chunk,source.length);
+  const normalizedAt=at-(source.length-position)/rate*1000,input=new Float32Array(source.length+chunk.length);input.set(source);input.set(chunk,source.length);
   const normalized=[],step=rate/16000;
   while(position+1<input.length){const i=Math.floor(position),fraction=position-i;normalized.push(input[i]*(1-fraction)+input[i+1]*fraction);position+=step;}
   const used=Math.floor(position);source=input.slice(Math.min(used,input.length));position-=Math.min(used,input.length);
-  if(!remainder.length)metadata=preview;
+  if(!remainder.length){metadata=preview;frameTime=normalizedAt;}
   const combined=new Float32Array(remainder.length+normalized.length);combined.set(remainder);combined.set(normalized,remainder.length);
   let offset=0;
   for(;offset+512<=combined.length;offset+=512){
    if(pending>=32){clear();fail(new Error('Speech detector could not keep up'));return;}
-   const frame=combined.slice(offset,offset+512),captured=epoch,tag=metadata;pending++;
+   const frame=combined.slice(offset,offset+512),captured=epoch,tag=metadata,at=frameTime+offset/16000*1000;pending++;
    tail=tail.then(async()=>{
     if(captured!==epoch)return;
     if(reset){detector.reset();reset=false;}
     const probability=await detector.process(frame,16000);
-    if(captured===epoch)accept(frame,probability,tag);
+    if(captured===epoch)accept(frame,probability,tag,at);
    }).catch(error=>{if(captured===epoch){clear();fail(error);}}).finally(()=>pending--);
    metadata=preview;
   }
-  remainder=combined.slice(offset);
+  remainder=combined.slice(offset);frameTime+=offset/16000*1000;
  }
  return {push,invalidate:clear,drain:()=>tail};
 }

@@ -5,6 +5,7 @@ import json
 from time import time
 import sqlite3
 import base64
+from datetime import datetime, timezone
 from uuid import uuid4
 import streamlit as st
 from streamlit.runtime.scriptrunner import get_script_run_ctx
@@ -14,6 +15,8 @@ from pawpal.assistant.assistant_actions import AssistantActions
 from pawpal.assistant.assistant_model import respond
 from pawpal.assistant.assistant_live import prepare_live
 from pawpal.planning.live_confirmation import stage_save, commit_save
+from pawpal.assistant.voice_planner import transcribe
+from pawpal.planning.date_intent import remember_request
 from pawpal.assistant.sable_assets import companion_assets
 
 
@@ -105,6 +108,15 @@ def render_assistant():
                 and item.get("session_id") == session.get("id") and type(item.get("turn")) is int
                 and item["turn"] >= session.get("audio_turn", 0)):
             session.update(audio_turn=item["turn"], audio_closed=item.get("closed") is True)
+            captured = item.get('captured_at')
+            try:
+                at = datetime.fromisoformat(captured) if isinstance(captured,str) else None
+                if at is None or at.tzinfo is None or abs((datetime.now(timezone.utc)-at).total_seconds()) > 900:
+                    raise ValueError('Invalid capture time')
+                captured = at.isoformat()
+            except ValueError:
+                captured = ''
+            session.setdefault('request_times', {}).setdefault(item['turn'], captured)
             state["turn"] = max(state["turn"], session.get("base_turn", 0) + item["turn"])
         if isinstance(item, dict) and item.get("kind") == "voice_end" and item.get("session_id"):
             terminated.add(item["session_id"])
@@ -147,10 +159,13 @@ def render_assistant():
                 state.pop("live_session", None)
                 text = str(event.get("text", ""))[:2000]
                 state["turn"] += 1
+                saved_before = set(state.get('receipts', {}))
                 try:
                     answer = respond(text, actions, state["history"], state["turn"])
                 except PlannerError as error:
                     answer = str(error)
+                if set(state.get('receipts', {})) != saved_before:
+                    st.session_state['assistant_refresh'] = True
                 state["history"] = (state["history"] + [{"role": "user", "text": text},
                                      {"role": "assistant", "text": answer}])[-20:]
                 receipt["message"] = answer
@@ -173,7 +188,18 @@ def render_assistant():
             if event.get("session_id") == session.get("id"):
                 session.update(active=True)
         elif kind == "voice_turn":
-            pass  # The latest audio boundary is applied before any queued action.
+            session = state.get('live_session', {})
+            if (event.get('closed') and not event.get('automatic')
+                    and event.get('session_id') == session.get('id')
+                    and session.get('id') not in terminated):
+                try:
+                    if not session.get('request_times', {}).get(event.get('turn')):
+                        raise PlannerError('Invalid request timestamp')
+                    text = transcribe(event.get('audio'))
+                except PlannerError:
+                    text = '[Unintelligible user turn; require the complete task date to be repeated.]'
+                remember_request(state, text, session.get('request_times', {}).get(event.get('turn')))
+                session.setdefault('date_turns', set()).add(event.get('turn'))
         elif kind == "cancel_tools":
             calls = state.get("live_calls", {})
             completed = [calls[i] for i in event.get("call_ids", []) if i in calls and calls[i].get("saved")]
@@ -217,6 +243,10 @@ def render_assistant():
                 elif (call.get('name') == 'preview_task' and state.get('proposal')
                       and event.get('preview_id') == state['proposal']['id']):
                     response = {'ok': False, 'error': 'Keep the displayed preview unchanged. Answer the question with read tools; a change needs a new user request.'}
+                elif (call.get('name') == 'preview_task' and
+                      (not state.get('date_requests') or raw_turn != session.get('audio_turn') or not session.get('audio_closed')
+                       or raw_turn not in session.get('date_turns', set()))):
+                    response = {'ok': False, 'error': 'Wait for the complete recorded request before previewing.'}
                 else:
                     response = actions.execute(call.get("name"), call.get("args", {}),
                                                str(event.get("utterance", ""))[:2000], turn)

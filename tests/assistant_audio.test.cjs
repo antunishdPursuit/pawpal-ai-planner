@@ -11,10 +11,88 @@ function fixture(denied=false,detectorOverride=null){
  const env={AudioContext:Audio,AudioWorkletNode:Worklet,WebSocket:Socket,navigator:{mediaDevices:{getUserMedia:async()=>{if(denied)throw Object.assign(new Error(),{name:'NotAllowedError'});return {getTracks:()=>tracks};}}}};
  const sandbox={window:env,Blob,URL,Map,Set,Uint8Array,DataView,Float32Array,setTimeout,clearTimeout,atob,btoa};vm.createContext(sandbox);vm.runInContext(source,sandbox);
  const live=sandbox.make({phase:v=>events.push(['phase',v]),end:(h,r)=>events.push(['end',r]),transcript:(r,t)=>events.push(['text',t]),tool:v=>events.push(['tool',v]),turn:v=>events.push(['turn',v]),commit:v=>events.push(['commit',v]),cancel:v=>events.push(['cancel',v]),resources:v=>events.push(['resources',v]),detector:async()=>detectorOverride||({process:frame=>frame.some(x=>Math.abs(x)>.01),destroy(){}})},env);
- return {live,events,sockets,tracks,env,worklets,players,contexts};
+ return {live,events,sockets,tracks,env,worklets,players,contexts,sandbox};
 }
 function speak(f){f.worklets.at(-1).port.onmessage({data:new Float32Array(8000).fill(.1)});f.worklets.at(-1).port.onmessage({data:new Float32Array(16000)});}
 const credential={token:'test-only',model:'test-model',session_id:'test-session'};
+
+test('voice date anchor uses captured samples before midnight despite later detection',async()=>{
+ const midnight=Date.parse('2026-11-12T05:00:00Z'),before=midnight-20;
+ const f=fixture(false,{frameSamples:512,reset(){},destroy(){},async process(){return .99;}});
+ let clock=before;f.sandbox.Date=class extends Date{constructor(at){super(at??clock);}static now(){return clock;}};
+ await f.live.start(credential);const s=f.sockets[0];s.onopen();
+ await s.onmessage({data:JSON.stringify({setupComplete:{}})});await s.onmessage({data:JSON.stringify({serverContent:{turnComplete:true}})});
+ clock=midnight+500;f.worklets[0].port.onmessage({data:{samples:new Float32Array(6401).fill(.1),time:0}});
+ await new Promise(setImmediate);
+ assert.equal(f.events.find(e=>e[0]==='turn'&&!e[1].closed)[1].captured_at,new Date(before).toISOString());f.live.stop();
+});
+
+test('voice date anchor includes pre-roll when neural detection accepts speech after midnight',async()=>{
+ const midnight=Date.parse('2026-11-12T05:00:00Z'),before=midnight-70;let frames=0;
+ const f=fixture(false,{frameSamples:512,reset(){},destroy(){},async process(){return ++frames<=3?.1:.99;}});
+ let clock=before;f.sandbox.Date=class extends Date{constructor(at){super(at??clock);}static now(){return clock;}};
+ await f.live.start(credential);const s=f.sockets[0];s.onopen();
+ await s.onmessage({data:JSON.stringify({setupComplete:{}})});await s.onmessage({data:JSON.stringify({serverContent:{turnComplete:true}})});
+ clock=midnight+500;f.worklets[0].port.onmessage({data:{samples:new Float32Array(6401).fill(.1),time:0}});
+ await new Promise(setImmediate);
+ assert.ok(frames>3);
+ assert.equal(f.events.find(e=>e[0]==='turn'&&!e[1].closed)[1].captured_at,new Date(before).toISOString());f.live.stop();
+});
+
+test('seeded onset survives more than 350ms of delayed detection and respects trimmed samples',()=>{
+ const f=fixture(),midnight=Date.parse('2026-11-12T05:00:00Z'),before=midnight-100;
+ const turns=f.sandbox.createSpeechTurns({start(){},audio(){},end(){},error:assert.fail},{process:()=>false});
+ turns.seed([new Float32Array(8000),new Float32Array(1600).fill(.1)],16000,null,before-500);
+ for(let n=0;n<40;n++)turns.pushClassified(new Float32Array(160).fill(.1),16000,false,null,before+100+n*10);
+ for(let n=0;n<10;n++)turns.pushClassified(new Float32Array(160).fill(.1),16000,true,null,before+500+n*10);
+ assert.equal(turns.latest().captured_at,new Date(before).toISOString());
+});
+
+test('quiet pre-roll with isolated noise peaks does not backdate speech across midnight',()=>{
+ const f=fixture(),midnight=Date.parse('2026-11-12T05:00:00Z'),start=midnight+100;
+ const turns=f.sandbox.createSpeechTurns({start(){},audio(){},end(){},error:assert.fail},{process:()=>false});
+ for(let n=0;n<20;n++){
+  const noise=new Float32Array(160).fill(.0005);noise[0]=.006;
+  turns.pushClassified(noise,16000,false,null,start-200+n*10);
+ }
+ for(let n=0;n<10;n++)turns.pushClassified(new Float32Array(160).fill(.1),16000,true,null,start+n*10);
+ assert.equal(turns.latest().captured_at,new Date(start).toISOString());
+});
+
+test('a full 500ms seed retains its onset at the 750ms acceptance boundary',()=>{
+ const f=fixture(),start=Date.parse('2026-11-12T04:59:59.900Z');
+ const turns=f.sandbox.createSpeechTurns({start(){},audio(){},end(){},error:assert.fail},{process:()=>false});
+ turns.seed([new Float32Array(8000).fill(.1)],16000,'seed-preview',start);
+ for(let n=0;n<74;n++)turns.pushClassified(new Float32Array(160).fill(.1),16000,false,null,start+500+n*10);
+ for(let n=0;n<10;n++)turns.pushClassified(new Float32Array(160).fill(.1),16000,true,null,start+1240+n*10);
+ assert.equal(turns.latest().captured_at,new Date(start).toISOString());
+ assert.equal(turns.latest().preview_id,'seed-preview');
+});
+
+test('512-sample detection crossing seed expiry retains onset and audio through confirmation',()=>{
+ const f=fixture(),start=Date.parse('2026-11-12T04:59:59.900Z'),prefix=new Float32Array(8000).fill(.1);
+ const turns=f.sandbox.createSpeechTurns({start(){},audio(){},end(){},error:assert.fail},{process:()=>false});
+ turns.seed([prefix],16000,'seed-preview',start);
+ for(let n=0;n<23;n++)turns.pushClassified(new Float32Array(512).fill(.1),16000,false,null,start+500+n*32);
+ for(let n=0;n<4;n++)turns.pushClassified(new Float32Array(512).fill(.1),16000,true,null,start+1236+n*32);
+ assert.equal(turns.latest().captured_at,new Date(start).toISOString());
+ assert.equal(turns.latest().preview_id,'seed-preview');
+ assert.deepEqual([...turns.latest().chunks[0]],[...prefix]);
+});
+
+test('closed normal turns carry their own recording before delayed Live transcription',async()=>{
+ const f=fixture();await f.live.start(credential);const s=f.sockets[0];s.onopen();
+ await s.onmessage({data:JSON.stringify({setupComplete:{}})});
+ await s.onmessage({data:JSON.stringify({serverContent:{turnComplete:true}})});
+ speak(f);
+ const closed=f.events.find(e=>e[0]==='turn'&&e[1].closed)[1];
+ assert.equal(closed.turn,1);assert.equal(closed.automatic,false);
+ assert.ok(Number.isFinite(Date.parse(closed.captured_at)));
+ assert.equal(closed.captured_at,f.events.find(e=>e[0]==='turn'&&!e[1].closed)[1].captured_at);
+ assert.ok(atob(closed.audio).startsWith('RIFF'));
+ assert.equal(f.events.filter(e=>e[0]==='text').length,0);
+ f.live.stop();
+});
 
 test('spoken input shows listening then working as soon as the utterance closes',async()=>{
  const f=fixture();await f.live.start(credential);const s=f.sockets[0];s.onopen();await s.onmessage({data:JSON.stringify({setupComplete:{}})});await s.onmessage({data:JSON.stringify({serverContent:{turnComplete:true}})});

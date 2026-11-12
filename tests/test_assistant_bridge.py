@@ -2,6 +2,7 @@ from types import SimpleNamespace
 from io import BytesIO
 import base64
 import wave
+from datetime import datetime, timezone
 import pawpal.planning.live_confirmation as live_confirmation
 import pawpal.assistant.assistant_ui as ui
 from pawpal.assistant.assistant_actions import AssistantActions
@@ -39,6 +40,9 @@ def harness(tmp_path,monkeypatch):
     monkeypatch.setattr(ui,"respond",lambda *args:"Typed response")
     monkeypatch.setattr(live_confirmation,"transcribe",lambda *args:"Yes, save it.")
     def drain():
+        for event in events:
+            if event.get('kind') == 'voice_turn':
+                event.setdefault('captured_at',datetime.now(timezone.utc).isoformat())
         for _ in range(20):
             try: return ui.render_assistant()
             except Rerun: pass

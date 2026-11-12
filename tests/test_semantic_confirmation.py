@@ -43,6 +43,7 @@ def test_unclear_reply_can_be_confirmed_on_later_turn_without_new_preview(tmp_pa
     event.update(turn=3, audio_turn=3)
     event['call']['id'] = 'retry'
     session.update(audio_turn=3)
+    session['request_times'][3] = session['request_times'][2]
     monkeypatch.setattr(confirmation, 'classify_confirmation', lambda *args:
         ConfirmationIntent(decision='confirm', accepts_conflict=False))
     verified = confirmation.stage_save(event, actions, session)

@@ -8,6 +8,7 @@ from pawpal.planning.gemini_planner import PlannerError, logger
 from pawpal.assistant.voice_completion import confirmed
 from pawpal.planning.confirmation_intent import classify_confirmation, interpret_confirmation
 from pawpal.assistant.voice_planner import transcribe
+from pawpal.planning.date_intent import remember_request
 
 
 def failure(message):
@@ -30,6 +31,9 @@ def stage_save(event, actions, session):
         return failure("Wait for a complete spoken confirmation before saving.")
     turn = session["base_turn"] + local_turn
     automatic = event.get("app_confirmation") is True
+    if automatic and not session.get('request_times', {}).get(local_turn):
+        state.pop('date_requests', None)
+        return require_new_preview(actions, 'The request timestamp is unavailable. Repeat the complete task date.')
     current_preview = (proposal and event.get("preview_id") == proposal["id"]
                        and call.get("args") == {"proposal_id": proposal["id"]})
     valid_turn = proposal and (turn > proposal["turn"] if automatic else turn == proposal["turn"] + 1)
@@ -52,7 +56,8 @@ def stage_save(event, actions, session):
                     or not 0 < recording.getnframes()/recording.getframerate() <= 30):
                 raise ValueError()
     except (ValueError, wave.Error, EOFError):
-        return failure("Confirmation audio is incomplete or too long. Please prepare a fresh preview and try again.")
+        remember_request(state, '[Unintelligible user turn; require the complete task date to be repeated.]')
+        return require_new_preview(actions, "Confirmation audio is incomplete or too long. Nothing new was saved.")
     key = (session["id"], local_turn, sha256(raw).hexdigest())
     transcripts = state.setdefault("confirmation_transcripts", {})
     if key not in transcripts:
@@ -63,8 +68,12 @@ def stage_save(event, actions, session):
             transcripts[key] = None
     text = transcripts[key]
     if text is None:
-        return {"result": {"ok": False, "decision": "unclear", "error": "I didn't catch your reply. The task preview is unchanged. Please repeat your reply."}}
+        remember_request(state, '[Unintelligible user turn; require the complete task date to be repeated.]')
+        return require_new_preview(actions, "I didn't catch your reply. Repeat the complete task date.")
     if automatic:
+        if local_turn not in session.setdefault('date_turns', set()):
+            remember_request(state, text, session['request_times'][local_turn])
+            session['date_turns'].add(local_turn)
         try:
             decision = interpret_confirmation(text, proposal, classify_confirmation)
         except PlannerError:
@@ -76,6 +85,8 @@ def stage_save(event, actions, session):
         logger.info("planner_event=confirmation decision=%s", decision['decision'])
         if decision['decision'] in {"change", "cancel"}:
             state.pop("proposal", None)
+            if decision['decision'] == 'cancel':
+                state.pop('date_requests', None)
         if decision['decision'] != 'confirm':
             return {'result': decision}
         # Only this server-side interpretation grants approval. Never trust a

@@ -31,6 +31,16 @@ The planner combines persistent local storage, a personal calendar, and Gemini-a
 - Review and edit the pet, date, time, recurrence, and location before saving. AI requests without a time prompt a follow-up question; Anytime must be explicitly chosen. Ambiguous requests prompt clarification; conflicting start times across future recurrences require confirmation.
 - Keep profiles, pets, tasks, and completion history in local SQLite storage.
 
+Assistant previews check the intended task date across ordered user turns. Time-only
+follow-ups retain the date, while later date corrections replace it. Weekday dates
+are calculated in the target owner's timezone and mismatches cannot become savable
+previews. Relative dates use the local day of the turn that supplied the date,
+so a time answer after midnight does not shift an earlier "tomorrow" request.
+Normal voice turns are independently transcribed for this check; delayed
+Live transcripts are not its source of truth. Verification adds provider work and
+can ask for the date again when speech or intent is unclear. Existing saved tasks
+are not corrected automatically. The separate task-dialog planning flow is unchanged.
+
 ## Run locally
 
 You need Python 3.11 or newer. AI and voice features require a Gemini API key, network access, and an available model; provider usage may incur charges. Manual task entry works without a key. Voice also requires microphone permission and a supported browser.
