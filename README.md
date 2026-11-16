@@ -1,5 +1,9 @@
 # PawPal AI Planner
 
+[![Watch the PawPal AI Planner demo (82 seconds)](docs/demo/poster.jpg)](docs/demo/pawpal-ai-planner-demo.mp4)
+
+**[Watch the 82-second demo](docs/demo/pawpal-ai-planner-demo.mp4)**: a typed request becomes a task, then a spoken conversation with Sable books a walk. Nothing is saved until you approve it.
+
 PawPal AI Planner is a local pet-care calendar that turns a typed or spoken request into a task you can review and save. Create a profile and pets, plan care on a personal calendar, and confirm the details before the app writes anything.
 
 The planner combines persistent local storage, a personal calendar, and Gemini-assisted task planning with validation and human confirmation.
@@ -13,6 +17,7 @@ The planner combines persistent local storage, a personal calendar, and Gemini-a
 - `pawpal/presentation/` contains the page layout, theme, and visual components.
 - `assets/` contains the styles, browser scripts, images, and bundled voice assets used by the app.
 - `tests/` contains the Python and browser-script tests; `diagrams/` contains the architecture and data diagrams.
+- `docs/demo/` contains the demo video and its poster image.
 - `seed_demo.py` creates optional fictional presentation data. `examples/main.py` preserves the earlier standalone model example; run it with `python -m examples.main`. It is not the planner entry point.
 
 ## What it does
