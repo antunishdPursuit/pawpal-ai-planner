@@ -1,5 +1,5 @@
 """Calendar math and complete typed/voice correction paths; semantic tests opt in."""
-from datetime import date
+from datetime import date, timezone
 import json
 import os
 from types import SimpleNamespace
@@ -92,10 +92,14 @@ def test_voice_uses_ordered_recordings_not_delayed_live_text(tmp_path, monkeypat
     spoken = iter(['Create a shower this Sunday', 'nine in the evening'])
     monkeypatch.setattr(ui, 'transcribe', lambda *args: next(spoken))
     monkeypatch.setattr('pawpal.assistant.assistant_actions.AssistantActions.today', lambda *args:'2026-11-11')
+    # Capture voice turns on the same fixed clock as typed requests, so "this Sunday" stays 2026-11-15.
+    monkeypatch.setattr(ui, 'datetime', dates.datetime)
+    captured_at = dates.datetime.now(timezone.utc).isoformat()
     seen = []
     monkeypatch.setattr(dates, 'classify_date', lambda requests,*args: seen.append([t['text'] for t in requests]) or weekday())
     for turn in (1,2):
-        events.append(dict(id=f'close-{turn}',kind='voice_turn',session_id='session',turn=turn,closed=True,audio=audio()))
+        events.append(dict(id=f'close-{turn}',kind='voice_turn',session_id='session',turn=turn,closed=True,audio=audio(),
+                           captured_at=captured_at))
         drain()
     args = dict(owner_id=owner.owner_id,pet_id=pet.pet_id,title='Shower',due_date='2026-11-16',time_of_day='21:00')
     events.append(dict(id='wrong',kind='live_tool',session_id='session',turn=2,utterance='today (stale)',
